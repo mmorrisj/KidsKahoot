@@ -95,6 +95,28 @@ test('the Fall Line cities are never asked which region they are in', () => {
   }
 });
 
+test('a highlighted-state question lights up the state it asks about', () => {
+  for (const ref of listQuestionRefs({ topics: ['us-state-shapes'] })) {
+    assert.equal(ref.template.id, 'us-state-shape');
+    const q = ref.template.make(createRng(4), ref.entity);
+    assert.deepEqual(q.media, { kind: 'us-map', value: ref.entity.name },
+      'the media must highlight the state that is the answer');
+    assert.equal(q.answer, ref.entity.name);
+    assert.ok(!q.map, 'the US map is media, not an answer surface');
+  }
+});
+
+test('highlighted-state distractors come from the same part of the country', () => {
+  // Kansas and Nebraska are the confusable ones; Vermont teaches nothing here.
+  const refs = listQuestionRefs({ topics: ['us-state-shapes'] });
+  const kansas = refs.find((r) => r.entity.name === 'Kansas');
+  const q = kansas.template.make(createRng(6), kansas.entity);
+  const regionOf = new Map(refs.map((r) => [r.entity.name, r.entity.region]));
+  for (const choice of q.choices) {
+    assert.equal(regionOf.get(choice), 'Midwest', `${choice} is not a Midwest state`);
+  }
+});
+
 test('state abbreviations compete with same-letter abbreviations', () => {
   // MI/MN/MO/MS/MT is exactly the set kids confuse, so those are the distractors.
   const refs = listQuestionRefs({ topics: ['us-abbreviations'] });

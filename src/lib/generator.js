@@ -61,6 +61,7 @@ export const TOPICS = [
 
   // United States
   { id: 'us-capitals', curriculum: 'united-states', label: 'State Capitals', icon: '⭐' },
+  { id: 'us-state-shapes', curriculum: 'united-states', label: 'Name the State', icon: '🧩' },
   { id: 'us-regions', curriculum: 'united-states', label: 'Regions of the US', icon: '🧭' },
   { id: 'us-abbreviations', curriculum: 'united-states', label: 'State Abbreviations', icon: '✉️' },
   { id: 'us-physical', curriculum: 'united-states', label: 'Rivers, Mountains & Lakes', icon: '🏔️' },
@@ -464,6 +465,31 @@ const TEMPLATES = [
       explanation: `${x.capital} is the capital of ${x.name}.`,
       card: { front: x.capital, back: x.name, hint: null },
       clue: { text: `${x.capital} is the capital of this state`, response: `What is ${x.name}?` },
+    }),
+  },
+  {
+    id: 'us-state-shape',
+    // Shares its dataset with the capital templates, so one round never asks
+    // about the same state as a shape and as a capital.
+    dataset: 'us-states',
+    topic: 'us-state-shapes',
+    entities: () => US_STATES,
+    tierOf: (x) => x.tier,
+    make: (rng, x) => ({
+      category: 'US States',
+      prompt: 'Which state is highlighted on the map?',
+      // The media is the question: the whole US, with this state lit up.
+      media: { kind: 'us-map', value: x.name },
+      answer: x.name,
+      choices: buildChoices(rng, {
+        answer: x.name,
+        // Same-region states first — the states a kid could plausibly confuse
+        // by shape and position are the ones next door.
+        candidates: neighborsFirst(rng, x, US_STATES, 'region', 'name'),
+      }),
+      explanation: `That is ${x.name}, in the ${x.region}.`,
+      card: { front: `Find ${x.name} on a US map`, back: `It is in the ${x.region}`, hint: null },
+      clue: { text: 'This state is highlighted on the map', response: `What is ${x.name}?` },
     }),
   },
   {

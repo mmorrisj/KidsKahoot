@@ -452,3 +452,27 @@ body {
 .legend__swatch--blue-ridge { background: #ffb74d; }
 .legend__swatch--valley-and-ridge { background: #b483d6; }
 .legend__swatch--appalachian-plateau { background: #e57373; }
+
+/* ------------------------------------- the US map, as question media */
+
+/* Sits inside the white prompt card, above the question text. */
+.prompt__media--map { line-height: 0; }
+
+.usmap {
+  width: 100%;
+  max-width: 520px;
+  height: auto;
+  display: inline-block;
+}
+
+.usmap__state { fill: #dcd9f3; stroke: #ffffff; stroke-width: 1.6; }
+.usmap__state--lit { fill: #f9a825; stroke: var(--ink); stroke-width: 2; }
+.usmap__frame { fill: none; stroke: #c2bce6; stroke-width: 1.5; }
+
+/* Rhode Island is a dozen pixels on a phone, so tiny states get pointed at. */
+.usmap__ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 5;
+  stroke-dasharray: 14 9;
+}

@@ -174,54 +174,92 @@ try {
   assert.ok(width <= 1, `the page scrolls sideways on a phone by ${width}px`);
 
   // ---- map questions, on a phone ------------------------------------------
-  await phone.goto(BASE_URL);
-  await phone.evaluate(() => localStorage.clear());
-  await phone.reload();
-  await phone.waitForSelector('.screen--setup');
-  await phone.click('.chip:has-text("Map only")');
-  await shoot(phone, '10-map-setup');
+  // In map-only mode each Virginia topic produces exactly one kind of map
+  // question, so each layer can be forced deterministically rather than hoping
+  // a random round happens to draw all three.
+  const LAYER_TOPICS = [
+    { topic: 'The Five Regions', layer: 'regions' },
+    { topic: 'Cities & Historic Places', layer: 'pins' },
+    { topic: 'Rivers, Bay & Borders', layer: 'neighbours' },
+  ];
+  for (const { topic, layer } of LAYER_TOPICS) {
+    await phone.goto(BASE_URL);
+    await phone.evaluate(() => localStorage.clear());
+    await phone.reload();
+    await phone.waitForSelector('.screen--setup');
+    await phone.click('.chip:has-text("Map only")');
+    for (const other of LAYER_TOPICS.filter((t) => t.topic !== topic)) {
+      await phone.click(`.topic-group .chip:has-text("${other.topic}")`);
+    }
+    if (layer === 'regions') await shoot(phone, '10-map-setup');
 
-  await phone.click('.btn--xl:has-text("Start")');
+    await phone.click('.btn--xl:has-text("Start")');
 
-  const layersSeen = new Set();
-  for (let i = 0; i < 40 && layersSeen.size < 3; i++) {
-    await phone.waitForSelector('.map');
+    for (let i = 0; i < 3; i++) {
+      await phone.waitForSelector('.map');
 
-    const info = await phone.evaluate(() => ({
-      layer: document.querySelector('.map__pin') ? 'pins'
-        : document.querySelector('.map__neighbour--live') ? 'neighbours' : 'regions',
-      targets: [...document.querySelectorAll('.map__target')]
-        .map((e) => e.getAttribute('aria-label')),
-    }));
+      const info = await phone.evaluate(() => ({
+        layer: document.querySelector('.map__pin') ? 'pins'
+          : document.querySelector('.map__neighbour--live') ? 'neighbours' : 'regions',
+        targets: [...document.querySelectorAll('.map__target')]
+          .map((e) => e.getAttribute('aria-label')),
+      }));
 
-    assert.ok(info.targets.length >= 3, 'a map question needs something to tap');
-    assert.equal(new Set(info.targets).size, info.targets.length, 'duplicate map targets');
-    assert.ok(info.targets.every(Boolean), 'every map target needs an aria-label');
+      assert.equal(info.layer, layer, `the ${topic} topic should ask ${layer} questions`);
+      assert.ok(info.targets.length >= 3, 'a map question needs something to tap');
+      assert.equal(new Set(info.targets).size, info.targets.length, 'duplicate map targets');
+      assert.ok(info.targets.every(Boolean), 'every map target needs an aria-label');
 
-    const firstOfLayer = !layersSeen.has(info.layer);
-    if (firstOfLayer) layersSeen.add(info.layer);
+      await tapMapTarget(phone, info.targets[0]);
+      await phone.waitForSelector('.feedback');
 
-    await tapMapTarget(phone, info.targets[0]);
-    await phone.waitForSelector('.feedback');
+      // Exactly one shape is marked right, and at most one is marked wrong.
+      const marks = await phone.evaluate(() => ({
+        correct: document.querySelectorAll('.map__paint--correct').length,
+        wrong: document.querySelectorAll('.map__paint--wrong').length,
+      }));
+      assert.equal(marks.correct, 1, `${layer}: expected one correct shape`);
+      assert.ok(marks.wrong <= 1, `${layer}: expected at most one wrong shape`);
 
-    // Exactly one shape is marked right, and at most one is marked wrong.
-    const marks = await phone.evaluate(() => ({
-      correct: document.querySelectorAll('.map__paint--correct').length,
-      wrong: document.querySelectorAll('.map__paint--wrong').length,
-    }));
-    assert.equal(marks.correct, 1, `${info.layer}: expected one correct shape`);
-    assert.ok(marks.wrong <= 1, `${info.layer}: expected at most one wrong shape`);
-
-    if (firstOfLayer) await shoot(phone, `11-map-${info.layer}`);
-    await phone.click('.feedback .btn');
-    if (await phone.locator('.screen--results').count()) break;
+      if (i === 0) await shoot(phone, `11-map-${layer}`);
+      await phone.click('.feedback .btn');
+      if (await phone.locator('.screen--results').count()) break;
+    }
   }
-  assert.deepEqual([...layersSeen].sort(), ['neighbours', 'pins', 'regions'],
-    'expected to see all three kinds of map question');
 
   const mapWidth = await phone.evaluate(() =>
     document.documentElement.scrollWidth - document.documentElement.clientWidth);
   assert.ok(mapWidth <= 1, `the map makes the page scroll sideways by ${mapWidth}px`);
+
+  // ---- highlighted-state questions, back on the desktop ---------------------
+  await page.goto(BASE_URL);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.waitForSelector('.screen--setup');
+
+  // Only the "Name the State" topic, so every question is a highlighted state.
+  await page.click('.chip:has-text("Virginia")');
+  await page.click('.chip:has-text("United States")');
+  for (const topic of ['State Capitals', 'Regions of the US', 'State Abbreviations',
+    'Rivers, Mountains & Lakes', 'Landmarks & Parks']) {
+    await page.click(`.topic-group .chip:has-text("${topic}")`);
+  }
+  await page.click('.btn--xl:has-text("Start")');
+
+  for (let i = 0; i < 3; i++) {
+    await page.waitForSelector('.screen--question .usmap');
+    assert.equal(await page.locator('.usmap__state').count(), 50,
+      'the media map should draw all fifty states');
+    assert.equal(await page.locator('.usmap__state--lit').count(), 1,
+      'exactly one state should be highlighted');
+    assert.equal(await page.locator('.usmap .map__target').count(), 0,
+      'the media map must not be tappable');
+    if (i === 0) await shoot(page, '12-us-highlight');
+    await page.click('.tile >> nth=0');
+    await page.waitForSelector('.feedback');
+    await page.click('.feedback .btn');
+    if (await page.locator('.screen--results').count()) break;
+  }
 } finally {
   await browser.close();
 }

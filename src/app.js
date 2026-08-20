@@ -22,8 +22,9 @@ import { runMultipleChoice } from './modes/multiple-choice.js';
 const app = document.getElementById('app');
 const STORE_KEY = 'geography-quest.settings';
 // Bump when the shape of a saved setting changes, so old saves are discarded
-// rather than silently selecting topics that no longer exist.
-const SETTINGS_VERSION = 3;
+// rather than silently selecting topics that no longer exist — or, as with the
+// "Name the State" topic, silently omitting ones that now do.
+const SETTINGS_VERSION = 4;
 const MAX_PLAYERS = 6;
 const ROUND_LENGTHS = [10, 15, 20];
 const TIMER_OPTIONS = [

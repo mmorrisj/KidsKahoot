@@ -13,6 +13,7 @@
  */
 import { h, render } from '../ui/dom.js';
 import { regionLegend, renderMap } from '../ui/map.js';
+import { renderUsHighlight } from '../ui/us-map.js';
 import {
   advance,
   current,
@@ -163,8 +164,14 @@ export function runMultipleChoice({ mount, session, onFinish }) {
         attempt > 1 && h('p.retry-flag', '↻ Seen this one before — worth half points'),
         h('div.prompt',
           question.media && h('div.prompt__media',
-            { class: question.media.kind === 'flag-large' ? 'prompt__media--large' : '' },
-            question.media.value),
+            {
+              class: question.media.kind === 'flag-large' ? 'prompt__media--large'
+                : question.media.kind === 'us-map' ? 'prompt__media--map' : '',
+            },
+            // Flags are emoji text; the US map is an inline SVG.
+            question.media.kind === 'us-map'
+              ? renderUsHighlight(question.media.value)
+              : question.media.value),
           h('h2.prompt__text', question.prompt),
         ),
         session.timerSeconds
