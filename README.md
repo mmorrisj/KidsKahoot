@@ -54,7 +54,7 @@ asked about in half a dozen ways:
 | flash card | France 🇫🇷 → Paris |
 | Jeopardy clue | *This city is the capital of France* → What is Paris? |
 
-Data rows currently yield **1,202 questions**. Hand-authoring that many is where
+Data rows currently yield **1,252 questions**. Hand-authoring that many is where
 a project like this dies, so nothing is hand-authored.
 
 Every generated question carries all of its forms at once — `prompt` + `choices`
@@ -340,15 +340,39 @@ mode reads `question.card`; a Jeopardy board reads `question.clue` and groups by
 
 ## Not built yet
 
-- **Flash-card mode** — `question.card` is already generated for every question.
+New game modes (the content is already generated for them):
+
+- **Flash-card mode** — `question.card` is already on every question.
 - **Reverse Jeopardy board** — a 5×6 grid of categories × point values, with
   `question.clue` and `question.tier` mapping onto the tile values. This is the
   best mode for mixed ages: put tier-1 questions in the cheap row and tier-3 in
   the expensive one, and a 7-year-old and an 11-year-old can share a board.
+
+More map:
+
+- **Tapping the US map** — the state shapes exist (`us-map.js`), but only as
+  question media; "tap Texas" and "tap the state north of Georgia" would need
+  the US map wired up as an answer surface the way the Virginia map is. The
+  world map could get the same treatment ("tap Brazil").
 - **Rivers on the map** — the four rivers feeding the Chesapeake are taught as
   lines, and tapping them needs river geometry the county data does not carry.
-- **Tapping the US map** — the state shapes now exist (`us-map.js`), but only as
-  media; "tap Virginia" and "tap the state north of Georgia" would need the US
-  map wired up as an answer surface the way the Virginia map is.
-- **Progress that survives a reload** — which questions a given kid keeps
-  missing, across sessions rather than within one round.
+
+Live games (the shape is there; these are the rough edges):
+
+- **Rejoining mid-game** — a player who reloads or drops keeps their score on
+  the board but cannot get back in; rejoining by name should reclaim the seat.
+- **Rematch** — the room is torn down when a game ends, so "play again with the
+  same players" means everyone re-joins a fresh lobby. One button should do it.
+- **A playing host** — the host only referees. On a two-kid evening the host
+  device should be able to deal itself in.
+- **Sounds** — half of what makes Kahoot feel like an event is the lobby music
+  and the answer stings.
+
+Tracking (the SQLite schema was chosen with these in mind):
+
+- **Per-question history** — the store keeps per-game totals, but not which
+  questions each player missed, so "practice what Maya keeps getting wrong"
+  is not yet a query anyone can run. Recording `results` per question is the
+  missing half.
+- **Pass-the-device games on the leaderboard** — only hosted live games are
+  recorded today; solo and shared-device rounds vanish when the tab closes.
