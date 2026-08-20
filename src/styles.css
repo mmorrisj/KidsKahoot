@@ -452,3 +452,41 @@ body {
 .legend__swatch--blue-ridge { background: #ffb74d; }
 .legend__swatch--valley-and-ridge { background: #b483d6; }
 .legend__swatch--appalachian-plateau { background: #e57373; }
+
+/* ------------------------------------------------- world locator (feedback) */
+
+/* Lives inside the light feedback panel, so it is styled light rather than
+   picking up the dark palette the answer map uses. */
+.locator { margin: 4px 0 0; width: 100%; }
+
+.locator__map {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #e3ecf6;
+  border-radius: 10px;
+}
+
+.locator__land { fill: #b9c6d6; stroke: #e3ecf6; stroke-width: 1; }
+.locator__land--home { fill: #f0a35e; }
+
+.locator__continent {
+  fill: #4a3a22;
+  font-size: 30px;
+  font-weight: 800;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: #f7e3cd;
+  stroke-width: 5;
+  stroke-linejoin: round;
+}
+
+.locator__halo { fill: rgba(214, 40, 40, 0.22); }
+.locator__pin { fill: #c62828; stroke: #fff; stroke-width: 4; }
+
+.locator__caption {
+  margin: 6px 0 0;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+.locator__caption strong { color: var(--ink); }

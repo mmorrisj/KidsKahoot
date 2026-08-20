@@ -13,6 +13,7 @@
  */
 import { h, render } from '../ui/dom.js';
 import { regionLegend, renderMap } from '../ui/map.js';
+import { renderWorldLocator } from '../ui/world-locator.js';
 import {
   advance,
   current,
@@ -227,6 +228,9 @@ export function runMultipleChoice({ mount, session, onFinish }) {
         // Naming the regions is safe now that the answer is in, and it is the
         // moment a kid is most likely to actually read them.
         question.map?.layer === 'regions' && regionLegend(),
+        // Same idea for the world: the answer is in, so show where the place
+        // actually is rather than leaving it as a word they just matched.
+        question.locate && renderWorldLocator(question.locate),
         result.correct && h('p.feedback__points',
           `+${result.points}${result.streak >= 3 ? ` · ${result.streak} in a row!` : ''}`),
         !result.correct && !result.isRetry

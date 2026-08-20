@@ -158,11 +158,27 @@ function factTemplate({ id, dataset, topic, facts, pools, applies }) {
         candidates: shuffle(rng, pools[x.pool].filter((v) => v !== x.answer)),
       }),
       explanation: `${x.clue}: ${x.answer}.`,
+      // Landmark facts answer with a country name, so they get a map too.
+      locate: COUNTRY_BY_NAME.has(x.answer) ? locate(COUNTRY_BY_NAME.get(x.answer)) : null,
       card: { front: x.prompt, back: x.answer, hint: null },
       clue: { text: x.clue, response: `What is ${x.answer}?` },
     }),
   };
 }
+
+/**
+ * What the feedback panel needs to point at a country on the world map. Every
+ * world question about a country carries one, so answering "which continent is
+ * Nepal on" ends with Nepal lit up on a map rather than just a word.
+ */
+const locate = (country) => ({
+  code: country.code,
+  name: country.name,
+  continent: country.continent,
+  flag: country.flag,
+});
+
+const COUNTRY_BY_NAME = new Map(COUNTRIES.map((c) => [c.name, c]));
 
 const ALL_REGION_NAMES = VA_REGIONS.map((r) => r.short);
 const ALL_BORDER_NAMES = VA_BORDERS.map((b) => b.name);
@@ -566,6 +582,7 @@ const TEMPLATES = [
         candidates: neighborsFirst(rng, x, COUNTRIES, 'continent', 'capital'),
       }),
       explanation: `${x.capital} is the capital of ${x.name}.`,
+      locate: locate(x),
       card: { front: `Capital of ${x.name}`, back: x.capital, hint: x.flag },
       clue: { text: `This city is the capital of ${x.name}`, response: `What is ${x.capital}?` },
     }),
@@ -587,6 +604,7 @@ const TEMPLATES = [
         candidates: neighborsFirst(rng, x, COUNTRIES, 'continent', 'name'),
       }),
       explanation: `${x.capital} ${x.flag} is the capital of ${x.name}.`,
+      locate: locate(x),
       card: { front: x.capital, back: x.name, hint: null },
       clue: { text: `The capital of this country is ${x.capital}`, response: `What is ${x.name}?` },
     }),
@@ -607,6 +625,7 @@ const TEMPLATES = [
         candidates: neighborsFirst(rng, x, COUNTRIES, 'continent', 'name'),
       }),
       explanation: `${x.flag} is the flag of ${x.name}.`,
+      locate: locate(x),
       card: { front: x.flag, back: x.name, hint: null },
       clue: { text: `This country flies the flag ${x.flag}`, response: `What is ${x.name}?` },
     }),
@@ -628,6 +647,7 @@ const TEMPLATES = [
         candidates: neighborsFirst(rng, x, COUNTRIES, 'continent', 'flag'),
       }),
       explanation: `${x.flag} is the flag of ${x.name}.`,
+      locate: locate(x),
       card: { front: `Flag of ${x.name}`, back: x.flag, hint: null },
       clue: { text: `This is the flag of ${x.name}`, response: `What is ${x.flag}?` },
     }),
@@ -649,6 +669,7 @@ const TEMPLATES = [
         candidates: shuffle(rng, CONTINENTS.filter((k) => k !== x.continent)),
       }),
       explanation: `${x.name} ${x.flag} is in ${x.continent}.`,
+      locate: locate(x),
       card: { front: `What continent is ${x.name} on?`, back: x.continent, hint: x.flag },
       clue: { text: `${x.name} is on this continent`, response: `What is ${x.continent}?` },
     }),
@@ -723,6 +744,7 @@ function materialize(rng, { template, entity, tier }) {
     tier,
     choiceStyle: 'text',
     map: null,
+    locate: null,
     note: entity.note ?? null,
     ...template.make(rng, entity),
   };
