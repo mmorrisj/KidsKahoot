@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRng } from '../src/lib/rng.js';
 import { projectToMap } from '../src/data/virginia-map.js';
+import { WORLD_MAP } from '../src/data/world-map.js';
 import {
   CHOICE_COUNT,
   CURRICULA,
@@ -209,6 +210,35 @@ test('a map question offers every shape on its layer as a choice', () => {
 
 test('asking for map questions outside Virginia yields nothing rather than junk', () => {
   assert.equal(countAvailable({ topics: topicsIn('world').map((t) => t.id), mapUse: 'map' }), 0);
+});
+
+test('world questions about a country can be shown on the world map', () => {
+  const questions = round({ topics: topicsIn('world').map((t) => t.id), count: 300 });
+  const located = questions.filter((q) => q.locate);
+  assert.ok(located.length > questions.length * 0.8,
+    `only ${located.length} of ${questions.length} world questions carry a locator`);
+
+  for (const q of located) {
+    assert.ok(WORLD_MAP.pins[q.locate.code], `${q.id}: no pin for ${q.locate.code}`);
+    assert.ok(WORLD_MAP.continents.some((c) => c.name === q.locate.continent),
+      `${q.id}: unknown continent ${q.locate.continent}`);
+  }
+});
+
+test('a locator never contradicts the answer it appears beside', () => {
+  // The map is shown as the explanation of a continent question, so the
+  // continent it lights up has to be the one the question just called correct.
+  for (const q of round({ topics: ['continents'], count: 200 })) {
+    assert.equal(q.locate.continent, q.answer,
+      `${q.id} answers ${q.answer} but would light up ${q.locate.continent}`);
+  }
+});
+
+test('questions with no country to point at get no locator', () => {
+  const rivers = round({ topics: ['world-physical'], count: 100 })
+    .filter((q) => q.category === 'Rivers' || q.category === 'Oceans');
+  assert.ok(rivers.length > 5, 'expected some river and ocean questions');
+  for (const q of rivers) assert.equal(q.locate, null, `${q.id} should have no locator`);
 });
 
 test('the question bank is large enough to be worth playing', () => {

@@ -14,6 +14,7 @@
 import { h, render } from '../ui/dom.js';
 import { connectLive } from '../lib/net.js';
 import { withFlags } from '../ui/flag.js';
+import { renderWorldLocator } from '../ui/world-locator.js';
 import { renderAnswers, renderPrompt } from './multiple-choice.js';
 
 const NAME_KEY = 'geography-quest.live-name';
@@ -225,6 +226,7 @@ export function runHostFlow({ mount, settings, hostName, gameName, onExit }) {
           h('p.feedback__headline', 'The answer is ', withFlags(message.answer), '.'),
           h('p.feedback__why', withFlags(message.explanation)),
           message.note && h('p.feedback__note', message.note),
+          message.locate && renderWorldLocator(message.locate),
           h('ul.livewire', message.results.map((r) =>
             h('li.livewire__row', { class: r.correct ? 'livewire__row--right' : 'livewire__row--wrong' },
               h('span', r.correct ? '✅' : r.choice == null ? '⌛' : '❌', ` ${r.name}`),
@@ -479,6 +481,7 @@ export function runJoinFlow({ mount, onExit }) {
           && h('p.feedback__answer', 'The answer is ', withFlags(message.answer), '.'),
         h('p.feedback__why', withFlags(message.explanation)),
         message.note && h('p.feedback__note', message.note),
+        message.locate && renderWorldLocator(message.locate),
         mine?.correct && h('p.feedback__points',
           `+${mine.points}${mine.streak >= 3 ? ` · ${mine.streak} in a row!` : ''}`),
         h('p.hint', message.last

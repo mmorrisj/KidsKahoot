@@ -99,6 +99,7 @@ src/
   data/
     virginia.js        five regions, 39 placed localities, rivers, borders
     virginia-map.js    GENERATED — outline, region shapes, neighbouring states
+    world-map.js       GENERATED — continent shapes and a pin per country
     us-states.js       all 50 states: capital, region, abbreviation, traps
     us-map.js          GENERATED — all 50 state shapes, AK/HI in inset boxes
     us-geography.js    US rivers, mountains, Great Lakes, landmarks, parks
@@ -118,19 +119,24 @@ src/
     map.js             the Virginia map as an answer surface
     us-map.js          the US map as question media (one state highlighted)
     flag.js            flags as images — emoji flags don't render everywhere
+    world-locator.js   the world map shown in the feedback panel
   assets/
     flags/             one SVG per country (fetched once, committed)
 scripts/
+  lib/geo.mjs              shared dissolve / project / simplify helpers
   build-virginia-map.mjs   generates the Virginia region map (run by hand)
   build-us-map.mjs         generates the US state-shapes map (run by hand)
+  build-world-map.mjs      generates the world map (run by hand)
   fetch-flags.mjs          downloads flag SVGs for countries.js (run by hand)
-  map-preview.html         eyeball the generated map while tuning boundaries
+  map-preview.html         eyeball the Virginia map while tuning boundaries
+  world-preview.html       eyeball the world map and every country pin
 test/
   data.test.js         dataset integrity
   generator.test.js    the answer is always present, distractors are plausible
   session.test.js      scoring, streaks, re-queueing, turn rotation
   virginia-map.test.js the generated map matches the regions the quiz asks about
   us-map.test.js       the generated US map covers exactly the fifty states
+  world-map.test.js    every country has a pin, and Oceania is not split in two
   live.test.js         whole live games against the hub, plus the leaderboard
   ui-smoke.mjs         full rounds in a real browser, incl. a three-device live game
 ```
@@ -145,6 +151,35 @@ are never asked "which region are you in".** All four grew up *on* the Fall Line
 and classroom materials disagree about which region to put them in, so the game
 does not pick a side — the Fall Line gets its own questions instead. Those four
 rows carry a `fallLine` flag, and a test asserts the region question skips them.
+
+## Showing where a place is
+
+World questions about a country end with a small world map in the feedback
+panel: the country's continent lit up, a pin on the country, and a caption. Ask
+*which continent is Tanzania on*, and the answer is not just the word "Africa" —
+it is Africa, with Tanzania on it.
+
+It appears **only after the answer is in**, and a test enforces that. Showing it
+alongside the question would answer a continent question outright.
+
+The map is Equal Earth rather than the Mercator most classrooms still hang on
+the wall. Mercator makes Greenland look the size of Africa, which is exactly the
+misconception a geography game should not be reinforcing.
+
+Two details the build handles that are easy to get wrong:
+
+- **The dateline.** Samoa and Tonga sit just east of the antimeridian, so a
+  Greenwich-centred map strands them on the far *left* edge, an ocean away from
+  the Oceania they belong to. The map is cut at 170°W instead — open Pacific —
+  so Oceania stays in one piece.
+- **Antarctica wraps the globe**, so it crosses every possible seam. Geometry
+  that straddles the cut is split rather than dropped; an earlier build silently
+  reduced Antarctica to a 122-character sliver, which a test now catches.
+
+Continents are dissolved using *this project's* continent for each country
+rather than the source data's, wherever the two disagree — otherwise the game
+could say Cyprus is in Europe and then light up Asia. The build point-tests
+every country pin against the continent the quiz claims for it.
 
 ## Answering on the map
 
@@ -191,6 +226,7 @@ no runtime dependency on anything.
 ```sh
 npm install                            # polygon-clipping, build-time only
 node scripts/build-virginia-map.mjs    # writes src/data/virginia-map.js
+node scripts/build-world-map.mjs       # writes src/data/world-map.js
 npm start                              # then open /scripts/map-preview.html
 ```
 

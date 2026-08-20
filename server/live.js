@@ -97,9 +97,13 @@ export function createHub({
 
   // ------------------------------------------------------------- questions
 
-  /** What a question looks like on the wire: everything except the answer. */
+  /**
+   * What a question looks like on the wire: everything except the answer.
+   * `locate` names the answer's country and continent outright, so it ships
+   * with the reveal instead.
+   */
   function publicQuestion(question) {
-    const { answer, explanation, note, card, clue, ...open } = question;
+    const { answer, explanation, note, card, clue, locate, ...open } = question;
     return open;
   }
 
@@ -174,6 +178,7 @@ export function createHub({
       answer: question.answer,
       explanation: question.explanation,
       note: question.note,
+      locate: question.locate ?? null,
       results,
       scoreboard: scoreboard(room),
       last: room.index + 1 >= room.questions.length,

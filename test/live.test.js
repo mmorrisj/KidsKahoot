@@ -18,6 +18,8 @@ const q = (id, answer, ...wrong) => ({
   choices: [answer, ...wrong],
   explanation: `${answer}.`,
   note: null,
+  // locate names the answer outright, so it must ride the reveal, not the question.
+  locate: { code: 'XX', name: answer, continent: 'Testland' },
   card: { front: `Q ${id}`, back: answer, hint: null },
   clue: { text: id, response: `What is ${answer}?` },
 });
@@ -106,6 +108,8 @@ test('questions go out without their answers', () => {
     assert.ok(!('answer' in message.question), 'the answer leaked onto the wire');
     assert.ok(!('explanation' in message.question), 'the explanation leaked');
     assert.ok(!('card' in message.question), 'the flash card leaked');
+    assert.ok(!('locate' in message.question),
+      'the locator names the answer and must wait for the reveal');
   }
 });
 
@@ -125,6 +129,7 @@ test('a full game: scoring, streaks, reveal, and the final scoreboard', () => {
   play('Richmond', 'Norfolk');
   let reveal = maya.last('reveal');
   assert.equal(reveal.answer, 'Richmond');
+  assert.equal(reveal.locate?.name, 'Richmond', 'the locator should arrive with the reveal');
   assert.deepEqual(
     reveal.results.map((r) => [r.name, r.correct, r.points]),
     [['Maya', true, 100], ['Sam', false, 0]],
