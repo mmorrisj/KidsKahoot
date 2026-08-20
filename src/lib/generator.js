@@ -19,8 +19,15 @@ import { COUNTRIES } from '../data/countries.js';
 import { US_STATES } from '../data/us-states.js';
 import { WORLD_FACTS, WORLD_POOLS } from '../data/world-geography.js';
 import { US_FACTS, US_POOLS, US_REGIONS } from '../data/us-geography.js';
-import { VA_FACTS, VA_PLACES, VA_POOLS, VA_REGIONS } from '../data/virginia.js';
+import {
+  VA_BORDERS,
+  VA_FACTS,
+  VA_PLACES,
+  VA_POOLS,
+  VA_REGIONS,
+} from '../data/virginia.js';
 import { CONTINENTS } from '../data/continents.js';
+import { projectToMap } from '../data/virginia-map.js';
 import { shuffle, sample } from './rng.js';
 
 export const CHOICE_COUNT = 4;
@@ -66,6 +73,16 @@ export const TOPICS = [
   { id: 'world-physical', curriculum: 'world', label: 'Rivers, Mountains & Landmarks', icon: '🏔️' },
 ];
 
+/**
+ * Whether a question is answered by tapping tiles or by tapping the map.
+ * Only Virginia has map questions, since it is the only curriculum with a map.
+ */
+export const MAP_USES = [
+  { id: 'both', label: 'Mix them', blurb: 'Some tiles, some map' },
+  { id: 'text', label: 'Answer buttons', blurb: 'Four tiles, no map' },
+  { id: 'map', label: 'Map only', blurb: 'Every answer is tapped on the map' },
+];
+
 export const TIERS = [
   { id: 1, label: 'Warm-up', blurb: 'The ones that come up first in class' },
   { id: 2, label: 'School level', blurb: 'The ones that show up on tests' },
@@ -73,6 +90,11 @@ export const TIERS = [
 ];
 
 export const topicsIn = (curriculumId) => TOPICS.filter((t) => t.curriculum === curriculumId);
+
+/** True when the chosen topics can produce map questions at all. */
+export function hasMapQuestions(topics) {
+  return listQuestionRefs({ topics, mapUse: 'map' }).length > 0;
+}
 
 /**
  * Order candidates so the ones nearest the answer come first. "Near" means the
@@ -140,6 +162,46 @@ function factTemplate({ id, dataset, topic, facts, pools, applies }) {
       clue: { text: x.clue, response: `What is ${x.answer}?` },
     }),
   };
+}
+
+const ALL_REGION_NAMES = VA_REGIONS.map((r) => r.short);
+const ALL_BORDER_NAMES = VA_BORDERS.map((b) => b.name);
+
+/**
+ * How many pins a "tap the place" question shows. Fewer than the tile count,
+ * because unlabelled pins are a harder read than four words.
+ */
+const PIN_COUNT = 4;
+
+/**
+ * Minimum gap between two pins, in map units (the map is 1000 wide).
+ *
+ * This is a playability floor, not a nicety: a pin's tap target is a circle of
+ * radius 34, so two pins closer than 68 apart overlap and one of them becomes
+ * physically impossible to hit. Harrisonburg and the Shenandoah Valley are 55
+ * apart and did exactly that. test/generator.test.js keeps this above the
+ * diameter used in src/ui/map.js.
+ */
+const MIN_PIN_SEPARATION = 90;
+
+const pinDistance = (a, b) => {
+  const [ax, ay] = projectToMap(a.coords);
+  const [bx, by] = projectToMap(b.coords);
+  return Math.hypot(ax - bx, ay - by);
+};
+
+/**
+ * Pick pins that are far enough apart to each be tappable. Candidates come in
+ * shuffled, and any that crowds one already chosen is skipped.
+ */
+function spacedPins(rng, answer, candidates, count) {
+  const chosen = [answer];
+  for (const candidate of shuffle(rng, candidates)) {
+    if (chosen.length >= count) break;
+    if (chosen.some((p) => pinDistance(p, candidate) < MIN_PIN_SEPARATION)) continue;
+    chosen.push(candidate);
+  }
+  return chosen;
 }
 
 /**
@@ -240,6 +302,118 @@ const TEMPLATES = [
       };
     },
   },
+  // ----------------------------------------------------- Virginia, on the map
+  {
+    id: 'map-region-by-name',
+    dataset: 'va-regions-by-name',
+    topic: 'va-regions',
+    usesMap: true,
+    entities: () => VA_REGIONS,
+    tierOf: (x) => x.tier,
+    make: (rng, x) => ({
+      category: 'Virginia Regions',
+      prompt: `Find the ${x.short} region and tap it.`,
+      media: null,
+      answer: x.short,
+      // Every region on the map is tappable, so all five are the choices.
+      choices: ALL_REGION_NAMES,
+      map: { layer: 'regions' },
+      explanation: `The ${x.short} region is ${x.clue}.`,
+      card: { front: `Where is the ${x.short} region?`, back: x.clue, hint: null },
+      clue: { text: `This Virginia region is ${x.clue}`, response: `What is the ${x.short}?` },
+    }),
+  },
+  {
+    id: 'map-region-from-clue',
+    dataset: 'va-regions-from-clue',
+    topic: 'va-regions',
+    usesMap: true,
+    entities: () => VA_REGIONS,
+    tierOf: (x) => Math.min(3, x.tier + 1),
+    make: (rng, x) => ({
+      category: 'Virginia Regions',
+      prompt: `Tap the region of Virginia that is ${x.clue}.`,
+      media: null,
+      answer: x.short,
+      choices: ALL_REGION_NAMES,
+      map: { layer: 'regions' },
+      explanation: `That is the ${x.short} region.`,
+      card: { front: `Which region is ${x.clue}?`, back: x.short, hint: null },
+      clue: { text: `This Virginia region is ${x.clue}`, response: `What is the ${x.short}?` },
+    }),
+  },
+  {
+    id: 'map-region-of-place',
+    // Shares a dataset with the written version, so a round asks about a place
+    // one way or the other, never both.
+    dataset: 'va-places',
+    topic: 'va-regions',
+    usesMap: true,
+    entities: () => VA_PLACES,
+    applies: (x) => !x.fallLine && x.coords,
+    tierOf: (x) => x.tier,
+    make: (rng, x) => ({
+      category: 'Virginia Regions',
+      prompt: `Which region is ${x.name} in? Tap it on the map.`,
+      media: null,
+      answer: x.region,
+      choices: ALL_REGION_NAMES,
+      // The pin is held back until the answer is in — showing it up front would
+      // turn "which region" into "which colour is this dot on".
+      map: { layer: 'regions', reveal: { coords: x.coords, label: x.name } },
+      explanation: `${x.name} is in the ${x.region} region.`,
+      card: { front: `Which region is ${x.name} in?`, back: x.region, hint: null },
+      clue: { text: `${x.name} is in this region`, response: `What is the ${x.region}?` },
+    }),
+  },
+  {
+    id: 'map-place',
+    dataset: 'va-places-on-map',
+    topic: 'va-places',
+    usesMap: true,
+    entities: () => VA_PLACES,
+    applies: (x) => Boolean(x.coords),
+    tierOf: (x) => x.tier,
+    make: (rng, x) => {
+      // Spread the pins out. Norfolk, Portsmouth, and Chesapeake are a few
+      // miles apart, and three dots on top of each other is a test of finger
+      // precision rather than of geography.
+      const others = VA_PLACES.filter((p) => p.coords && p !== x);
+      const pins = shuffle(rng, spacedPins(rng, x, others, PIN_COUNT))
+        .map((p) => ({ name: p.name, coords: p.coords }));
+      return {
+        category: 'Virginia Places',
+        prompt: `Tap ${x.name} on the map.`,
+        media: null,
+        answer: x.name,
+        choices: pins.map((p) => p.name),
+        map: { layer: 'pins', pins },
+        explanation: `${x.name} is in the ${x.region ?? 'Fall Line'} part of Virginia.`,
+        card: { front: `Where is ${x.name}?`, back: x.region ?? 'on the Fall Line', hint: null },
+        clue: { text: `This place is in Virginia`, response: `What is ${x.name}?` },
+      };
+    },
+  },
+  {
+    id: 'map-border-state',
+    dataset: 'va-borders',
+    topic: 'va-water',
+    usesMap: true,
+    entities: () => VA_BORDERS,
+    tierOf: (x) => x.tier,
+    make: (rng, x) => ({
+      category: 'Virginia Borders',
+      prompt: `Tap ${x.name} on the map.`,
+      media: null,
+      answer: x.name,
+      choices: ALL_BORDER_NAMES,
+      map: { layer: 'neighbours' },
+      explanation: `${x.name} ${x.blurb}.`,
+      card: { front: `Where is ${x.name}?`, back: `To Virginia's ${x.side}`, hint: null },
+      clue: { text: `This state ${x.blurb}`, response: `What is ${x.name}?` },
+    }),
+  },
+
   factTemplate({
     id: 'va-fact',
     dataset: 'va-facts',
@@ -489,6 +663,19 @@ const TEMPLATES = [
 ];
 
 const ALL_TOPIC_IDS = TOPICS.map((t) => t.id);
+const KNOWN_TOPIC_IDS = new Set(ALL_TOPIC_IDS);
+
+// Catch a malformed template when the module loads, not when a kid starts a
+// round. Forgetting `entities` on a new template is an easy mistake to make.
+for (const template of TEMPLATES) {
+  const where = `template "${template.id}"`;
+  if (typeof template.entities !== 'function') throw new Error(`${where} has no entities()`);
+  if (typeof template.tierOf !== 'function') throw new Error(`${where} has no tierOf()`);
+  if (!template.dataset) throw new Error(`${where} has no dataset`);
+  if (typeof template.topic === 'string' && !KNOWN_TOPIC_IDS.has(template.topic)) {
+    throw new Error(`${where} points at unknown topic "${template.topic}"`);
+  }
+}
 
 function entityKey(entity) {
   return entity.code ?? entity.abbr ?? entity.id ?? entity.name ?? entity.short;
@@ -502,12 +689,20 @@ const topicOf = (template, entity) =>
  * references. Cheap to compute, so the UI can show an honest question count
  * before a round starts.
  */
-export function listQuestionRefs({ topics = ALL_TOPIC_IDS, tiers = [1, 2, 3] } = {}) {
+export function listQuestionRefs({
+  topics = ALL_TOPIC_IDS,
+  tiers = [1, 2, 3],
+  mapUse = 'both',
+} = {}) {
   const topicSet = new Set(topics);
   const tierSet = new Set(tiers);
   const refs = [];
 
   for (const template of TEMPLATES) {
+    // "Map only" keeps just the map templates; "answer buttons" drops them.
+    if (mapUse === 'map' && !template.usesMap) continue;
+    if (mapUse === 'text' && template.usesMap) continue;
+
     for (const entity of template.entities()) {
       if (template.applies && !template.applies(entity)) continue;
       if (!topicSet.has(topicOf(template, entity))) continue;
@@ -527,6 +722,7 @@ function materialize(rng, { template, entity, tier }) {
     curriculum: TOPICS.find((t) => t.id === topicOf(template, entity))?.curriculum,
     tier,
     choiceStyle: 'text',
+    map: null,
     note: entity.note ?? null,
     ...template.make(rng, entity),
   };
@@ -540,8 +736,8 @@ function materialize(rng, { template, entity, tier }) {
  * each row is used at most once per round unless the pool is too small to fill
  * the round otherwise.
  */
-export function generateQuestions({ rng, topics, tiers, count = 10 } = {}) {
-  const refs = shuffle(rng, listQuestionRefs({ topics, tiers }));
+export function generateQuestions({ rng, topics, tiers, mapUse, count = 10 } = {}) {
+  const refs = shuffle(rng, listQuestionRefs({ topics, tiers, mapUse }));
 
   const usedRows = new Set();
   const primary = [];

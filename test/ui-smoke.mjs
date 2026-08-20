@@ -19,6 +19,52 @@ async function shoot(page, name) {
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
 }
 
+/**
+ * Tap a map shape where a person would: at the shape's own label anchor, mapped
+ * from viewBox units into page pixels. A bounding-box centre is not good enough
+ * — the regions are diagonal bands, and the centre of the Piedmont's box lands
+ * in the Blue Ridge.
+ */
+async function tapMapTarget(page, label) {
+  const point = await page.evaluate(async (wanted) => {
+    const { VA_MAP } = await import('/src/data/virginia-map.js');
+    const anchors = Object.fromEntries([
+      ...VA_MAP.regions.map((r) => [r.short, r.label]),
+      ...VA_MAP.neighbours.map((n) => [n.name, n.label]),
+    ]);
+    const svg = document.querySelector('.map');
+    const target = [...svg.querySelectorAll('.map__target')]
+      .find((e) => e.getAttribute('aria-label') === wanted);
+    if (!target) return null;
+
+    const spot = svg.createSVGPoint();
+    if (anchors[wanted]) {
+      [spot.x, spot.y] = anchors[wanted];
+    } else {
+      const box = target.getBBox(); // pins are round, so their centre is fine
+      spot.x = box.x + box.width / 2;
+      spot.y = box.y + box.height / 2;
+    }
+    const screen = spot.matrixTransform(svg.getScreenCTM());
+    return { x: screen.x, y: screen.y };
+  }, label);
+
+  if (!point) throw new Error(`no map target labelled "${label}"`);
+  await page.mouse.click(point.x, point.y);
+}
+
+/** Answer whichever surface this question happens to be using. */
+async function answerSomehow(page) {
+  if (await page.locator('.tile:not([disabled])').count()) {
+    await page.click('.tile >> nth=0');
+    return;
+  }
+  const label = await page.evaluate(() =>
+    document.querySelector('.map__target')?.getAttribute('aria-label'));
+  if (!label) throw new Error('the question offered neither tiles nor a map');
+  await tapMapTarget(page, label);
+}
+
 function watch(page, tag) {
   page.on('console', (m) => { if (m.type() === 'error') problems.push(`${tag} console: ${m.text()}`); });
   page.on('pageerror', (e) => problems.push(`${tag} threw: ${e.message}`));
@@ -39,6 +85,8 @@ try {
   await page.click('text=+ Add player');
   await page.fill('.player-input >> nth=1', 'Sam');
   await page.click('.chip:has-text("20s")');
+  // Pin this pass to the tile surface; the phone pass below covers the map.
+  await page.click('.chip:has-text("Answer buttons")');
 
   // Virginia is the default curriculum, so only its topics are offered.
   assert.deepEqual(
@@ -90,6 +138,8 @@ try {
     if (await page.locator('.tile:not([disabled])').count()) { await page.click('.tile >> nth=0'); continue; }
     await page.waitForTimeout(100);
   }
+  assert.equal(await page.locator('.map').count(), 0,
+    'the answer-buttons setting should keep the map out of the round');
   await page.waitForSelector('.screen--results');
   assert.equal(await page.locator('.scoreboard__row').count(), 2, 'both players should be scored');
   await shoot(page, '6-results');
@@ -114,13 +164,64 @@ try {
   // A single player skips the hand-off screen and goes straight to the question.
   await phone.waitForSelector('.screen--question');
   await shoot(phone, '8-mobile-question');
-  await phone.click('.tile >> nth=0');
+  // Left on the default setting, so this question could be either surface.
+  await answerSomehow(phone);
   await phone.waitForSelector('.feedback');
   await shoot(phone, '9-mobile-feedback');
 
   const width = await phone.evaluate(() =>
     document.documentElement.scrollWidth - document.documentElement.clientWidth);
   assert.ok(width <= 1, `the page scrolls sideways on a phone by ${width}px`);
+
+  // ---- map questions, on a phone ------------------------------------------
+  await phone.goto(BASE_URL);
+  await phone.evaluate(() => localStorage.clear());
+  await phone.reload();
+  await phone.waitForSelector('.screen--setup');
+  await phone.click('.chip:has-text("Map only")');
+  await shoot(phone, '10-map-setup');
+
+  await phone.click('.btn--xl:has-text("Start")');
+
+  const layersSeen = new Set();
+  for (let i = 0; i < 40 && layersSeen.size < 3; i++) {
+    await phone.waitForSelector('.map');
+
+    const info = await phone.evaluate(() => ({
+      layer: document.querySelector('.map__pin') ? 'pins'
+        : document.querySelector('.map__neighbour--live') ? 'neighbours' : 'regions',
+      targets: [...document.querySelectorAll('.map__target')]
+        .map((e) => e.getAttribute('aria-label')),
+    }));
+
+    assert.ok(info.targets.length >= 3, 'a map question needs something to tap');
+    assert.equal(new Set(info.targets).size, info.targets.length, 'duplicate map targets');
+    assert.ok(info.targets.every(Boolean), 'every map target needs an aria-label');
+
+    const firstOfLayer = !layersSeen.has(info.layer);
+    if (firstOfLayer) layersSeen.add(info.layer);
+
+    await tapMapTarget(phone, info.targets[0]);
+    await phone.waitForSelector('.feedback');
+
+    // Exactly one shape is marked right, and at most one is marked wrong.
+    const marks = await phone.evaluate(() => ({
+      correct: document.querySelectorAll('.map__paint--correct').length,
+      wrong: document.querySelectorAll('.map__paint--wrong').length,
+    }));
+    assert.equal(marks.correct, 1, `${info.layer}: expected one correct shape`);
+    assert.ok(marks.wrong <= 1, `${info.layer}: expected at most one wrong shape`);
+
+    if (firstOfLayer) await shoot(phone, `11-map-${info.layer}`);
+    await phone.click('.feedback .btn');
+    if (await phone.locator('.screen--results').count()) break;
+  }
+  assert.deepEqual([...layersSeen].sort(), ['neighbours', 'pins', 'regions'],
+    'expected to see all three kinds of map question');
+
+  const mapWidth = await phone.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  assert.ok(mapWidth <= 1, `the map makes the page scroll sideways by ${mapWidth}px`);
 } finally {
   await browser.close();
 }

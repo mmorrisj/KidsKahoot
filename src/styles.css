@@ -350,3 +350,105 @@ body {
   letter-spacing: 0.04em;
   color: var(--on-dark-soft);
 }
+
+/* --------------------------------------------------------------- the map */
+
+.map-wrap {
+  background: #0f0b3d;
+  border-radius: var(--radius);
+  padding: 6px;
+  overflow: hidden;
+}
+
+.map { display: block; width: 100%; height: auto; }
+
+.map__neighbour { fill: #2b2470; stroke: #453c96; stroke-width: 1.5; }
+.map__neighbour--live { fill: #3a3196; }
+.map__outline { fill: none; stroke: #fff; stroke-width: 3; pointer-events: none; }
+
+.map__region--coastal-plain { fill: #4fc3f7; }
+.map__region--piedmont { fill: #7bc47f; }
+.map__region--blue-ridge { fill: #ffb74d; }
+.map__region--valley-and-ridge { fill: #b483d6; }
+.map__region--appalachian-plateau { fill: #e57373; }
+.map__region { stroke: #16143a; stroke-width: 1.5; }
+
+/* When the neighbours are the answer, Virginia is only there for orientation. */
+.map__region--muted { fill: #6f6aa8; }
+.map__here {
+  fill: #fff;
+  font-size: 30px;
+  font-weight: 800;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.map__target { cursor: pointer; }
+.map__target--done { cursor: default; pointer-events: none; }
+.map__target:focus-visible { outline: 3px solid #ffd54f; outline-offset: 2px; }
+
+/* Invisible fat-stroked copies that widen the tap area of thin regions. */
+.map__hit { fill: transparent; stroke: transparent; }
+.map__hit:hover { fill: rgba(255, 255, 255, 0.14); stroke: rgba(255, 255, 255, 0.14); }
+@media (hover: none) { .map__hit:hover { fill: transparent; stroke: transparent; } }
+
+/* Result marking goes on the visible shape, not the hit layer. The correct
+   shape is ringed in amber rather than white, because the state outline is
+   already white and a white ring on the Coastal Plain disappears into it. */
+.map__region, .map__neighbour, .map__pin-dot { transition: opacity 0.2s ease; }
+.map__paint--correct { stroke: #ffd54f; stroke-width: 9; filter: brightness(1.15); }
+.map__paint--wrong { stroke: var(--bad); stroke-width: 8; opacity: 0.75; }
+.map__paint--faded { opacity: 0.2; }
+.map__target--correct .map__pin-dot { fill: #1f7a33; stroke: #fff; stroke-width: 5; }
+.map__target--wrong .map__pin-dot { fill: var(--bad); stroke: #fff; stroke-width: 5; }
+
+/* stroke:none matters — without it the pin group's result outline
+   would paint a huge white ring around the invisible tap circle. */
+.map__pin-hit { fill: transparent; stroke: none; }
+.map__pin-dot { fill: #16143a; stroke: #fff; stroke-width: 4; }
+.map__pin:hover .map__pin-dot { fill: #3a3196; }
+
+.map__reveal-dot { fill: #ffd54f; stroke: #16143a; stroke-width: 3; }
+
+.map__reveal-label, .map__answer-label {
+  fill: #fff;
+  font-weight: 800;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: #16143a;
+  stroke-width: 6;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.map__reveal-label { font-size: 26px; }
+.map__answer-label { font-size: 30px; }
+
+/* Region names, shown with the feedback rather than during the question. */
+.legend {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.legend__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.legend__swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+.legend__swatch--coastal-plain { background: #4fc3f7; }
+.legend__swatch--piedmont { background: #7bc47f; }
+.legend__swatch--blue-ridge { background: #ffb74d; }
+.legend__swatch--valley-and-ridge { background: #b483d6; }
+.legend__swatch--appalachian-plateau { background: #e57373; }

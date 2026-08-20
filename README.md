@@ -9,11 +9,14 @@ quizzed on the capital of Uzbekistan:
 
 | Curriculum | Topics | Questions |
 | --- | --- | --- |
-| **Virginia** | the five regions, cities & historic places, rivers & borders | 86 |
+| **Virginia** | the five regions, cities & historic places, rivers & borders | 175 |
 | **United States** | state capitals, regions, abbreviations, landforms, landmarks | 288 |
 | **World** | capitals, flags, continents, physical geography | 739 |
 
 Virginia is the default, and each curriculum can be switched on independently.
+
+Virginia questions can be answered on **an actual map of Virginia** instead of
+four tiles — see below.
 
 ## Running it
 
@@ -45,7 +48,7 @@ asked about in half a dozen ways:
 | flash card | France 🇫🇷 → Paris |
 | Jeopardy clue | *This city is the capital of France* → What is Paris? |
 
-Data rows currently yield **1,113 questions**. Hand-authoring that many is where
+Data rows currently yield **1,202 questions**. Hand-authoring that many is where
 a project like this dies, so nothing is hand-authored.
 
 Every generated question carries all of its forms at once — `prompt` + `choices`
@@ -84,7 +87,8 @@ src/
   app.js               setup and results screens, routing
   styles.css
   data/
-    virginia.js        five regions, 39 places, rivers, borders, Fall Line
+    virginia.js        five regions, 39 placed localities, rivers, borders
+    virginia-map.js    GENERATED — outline, region shapes, neighbouring states
     us-states.js       all 50 states: capital, region, abbreviation, traps
     us-geography.js    US rivers, mountains, Great Lakes, landmarks, parks
     countries.js       140 countries: capital, continent, flag, tier, traps
@@ -95,12 +99,18 @@ src/
     session.js         queue, turn order, scoring, re-queueing (no DOM)
     rng.js             seeded RNG, so a round can be replayed exactly
   modes/
-    multiple-choice.js the Kahoot-shaped mode
-  ui/dom.js
+    multiple-choice.js the Kahoot-shaped mode, tiles or map
+  ui/
+    dom.js
+    map.js             the map as an answer surface
+scripts/
+  build-virginia-map.mjs   generates the Virginia region map (run by hand)
+  map-preview.html         eyeball the generated map while tuning boundaries
 test/
   data.test.js         dataset integrity
   generator.test.js    the answer is always present, distractors are plausible
   session.test.js      scoring, streaks, re-queueing, turn rotation
+  virginia-map.test.js the generated map matches the regions the quiz asks about
   ui-smoke.mjs         plays a full two-player round in a real browser
 ```
 
@@ -114,6 +124,72 @@ are never asked "which region are you in".** All four grew up *on* the Fall Line
 and classroom materials disagree about which region to put them in, so the game
 does not pick a side — the Fall Line gets its own questions instead. Those four
 rows carry a `fallLine` flag, and a test asserts the region question skips them.
+
+## Answering on the map
+
+Virginia questions come in two surfaces, chosen with a setting on the setup
+screen: four coloured tiles, or the map. Map questions come in three kinds.
+
+| Kind | Example | What you tap |
+| --- | --- | --- |
+| Region | *Find the Valley and Ridge region and tap it* | one of the five regions |
+| Region of a place | *Which region is Roanoke in? Tap it on the map* | one of the five regions |
+| Place | *Tap Richmond on the map* | one of four pins |
+| Border state | *Tap Tennessee on the map* | one of the five neighbouring states |
+
+Three things about how they behave are deliberate:
+
+- **Nothing is labelled while the question is live.** Labelling the regions
+  would turn "find the Valley and Ridge" into reading, which is the skill the
+  map exists to avoid testing. Names and a colour legend appear with the
+  feedback, which is also when a kid is most likely to read them.
+- **For "which region is Roanoke in", the pin is held back until the answer is
+  in.** Showing it up front would reduce the question to "which colour is this
+  dot on". Afterwards the pin drops, so a miss still teaches where Roanoke is.
+- **Small regions win contested taps.** The Blue Ridge is a few miles wide in
+  northern Virginia — about four pixels on a phone. Every region gets an
+  invisible fat-stroked copy of itself as a tap target, stacked smallest last,
+  so a tap near the Blue Ridge lands on the Blue Ridge rather than on the
+  Piedmont, which is five times its size and impossible to miss anyway.
+
+Pins get the same treatment in the generator: a "tap the place" question picks
+pins that are at least 90 map units apart, because two pins closer than their
+own tap targets overlap and the covered one cannot be pressed at all. Norfolk,
+Portsmouth, and Chesapeake are a few miles from each other, and a test keeps
+that separation above the pin size used by the renderer.
+
+Region and pin questions crop the map to Virginia; only border questions frame
+the neighbouring states, which is worth about a third more map on a phone.
+
+## The Virginia region map
+
+`src/data/virginia-map.js` is generated, not written. It holds the Virginia
+outline plus the five region shapes as inline SVG paths, about 9 kB total, with
+no runtime dependency on anything.
+
+```sh
+npm install                            # polygon-clipping, build-time only
+node scripts/build-virginia-map.mjs    # writes src/data/virginia-map.js
+npm start                              # then open /scripts/map-preview.html
+```
+
+The state outline is the union of real county polygons from the US Census
+cartographic boundary files (public domain), which is what gives the Eastern
+Shore, the Chesapeake, and the southwest tail their correct shapes.
+
+The five regions are **not** built by grouping counties. That approach fails for
+the Blue Ridge: in northern Virginia it is a ridge a few miles wide, so no county
+there sits entirely inside it, and a county map would erase the region exactly
+where a kid is asked to point at it. Instead the outline is sliced by four
+boundary polylines, which is also how the maps in Virginia Studies materials are
+drawn.
+
+Those polylines are the one hand-placed thing in the pipeline, so the build
+checks them: **every** place in `virginia.js` that has a region is point-tested
+against the sliced shapes, and the build fails if any lands in the wrong one, so
+the map and the answers cannot drift apart. That check caught two real errors —
+a plateau boundary drawn northwest of Wise and Norton, and a Blue Ridge boundary
+that put Mount Rogers in the valley.
 
 ## Adding content
 
@@ -147,9 +223,9 @@ mode reads `question.card`; a Jeopardy board reads `question.clue` and groups by
   `question.clue` and `question.tier` mapping onto the tile values. This is the
   best mode for mixed ages: put tier-1 questions in the cheap row and tier-3 in
   the expensive one, and a 7-year-old and an 11-year-old can share a board.
-- **Map mode** — click the region on an outline map. This is the mode Virginia
-  Studies would benefit from most, since the five regions are taught as shapes
-  on a map. Needs SVG map data, which is the one thing here that cannot be
-  generated from a text row.
+- **Rivers on the map** — the four rivers feeding the Chesapeake are taught as
+  lines, and tapping them needs river geometry the county data does not carry.
+- **A map for the US curriculum** — the same pipeline would produce state
+  shapes; "tap Virginia" and "tap the state north of Georgia" fall out of it.
 - **Progress that survives a reload** — which questions a given kid keeps
   missing, across sessions rather than within one round.

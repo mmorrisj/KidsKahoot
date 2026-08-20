@@ -116,6 +116,67 @@ export const VA_PLACES = [
 ];
 
 /**
+ * [longitude, latitude] for every place, so the map can drop a pin on it.
+ *
+ * These are load-bearing: scripts/build-virginia-map.mjs point-tests every one
+ * of them against the region shapes it generates and fails the build if a place
+ * lands in a region other than the one listed above. The map and these answers
+ * cannot drift apart.
+ */
+const COORDS = {
+  // Coastal Plain
+  'Virginia Beach': [-75.98, 36.85],
+  Norfolk: [-76.29, 36.85],
+  Chesapeake: [-76.29, 36.72],
+  'Newport News': [-76.43, 37.09],
+  Hampton: [-76.35, 37.03],
+  Portsmouth: [-76.36, 36.84],
+  Suffolk: [-76.58, 36.73],
+  Williamsburg: [-76.71, 37.27],
+  Jamestown: [-76.78, 37.21],
+  Yorktown: [-76.51, 37.24],
+  'Mount Vernon': [-77.09, 38.71],
+  'the Great Dismal Swamp': [-76.50, 36.65],
+  'the Eastern Shore': [-75.85, 37.60],
+  Chincoteague: [-75.38, 37.93],
+
+  // Piedmont
+  Charlottesville: [-78.48, 38.03],
+  Lynchburg: [-79.14, 37.41],
+  Danville: [-79.40, 36.59],
+  Monticello: [-78.45, 38.01],
+  'Appomattox Court House': [-78.80, 37.38],
+  Manassas: [-77.48, 38.75],
+
+  // Blue Ridge Mountains
+  'Shenandoah National Park': [-78.47, 38.53],
+  'Skyline Drive': [-78.44, 38.52],
+  'the Blue Ridge Parkway': [-79.60, 37.44],
+  'Mount Rogers': [-81.54, 36.66],
+
+  // Valley and Ridge
+  Roanoke: [-79.94, 37.27],
+  Winchester: [-78.16, 39.19],
+  Staunton: [-79.07, 38.15],
+  Harrisonburg: [-78.87, 38.45],
+  Lexington: [-79.44, 37.78],
+  'Luray Caverns': [-78.46, 38.67],
+  'Natural Bridge': [-79.54, 37.63],
+  'the Shenandoah Valley': [-78.80, 38.60],
+
+  // Appalachian Plateau
+  'Big Stone Gap': [-82.78, 36.87],
+  Norton: [-82.63, 36.93],
+  Wise: [-82.58, 36.98],
+
+  // Fall Line cities
+  Richmond: [-77.44, 37.54],
+  Fredericksburg: [-77.46, 38.30],
+  Alexandria: [-77.05, 38.80],
+  Petersburg: [-77.40, 37.23],
+};
+
+/**
  * A phrase that completes "Which Virginia place ___?", for places famous for
  * something in particular. Kept separate from `note` because a note is read
  * *after* answering and may name the answer, while a claim *is* the question.
@@ -138,6 +199,7 @@ const CLAIMS = {
 
 for (const place of VA_PLACES) {
   place.claim = CLAIMS[place.name] ?? null;
+  place.coords = COORDS[place.name] ?? null;
 }
 
 export const VA_POOLS = {
@@ -258,4 +320,19 @@ export const VA_FACTS = [
   f('va-great-valley', 'Virginia Regions', 'features', 2,
     'The Great Valley of Virginia is better known by what name?', 'the Shenandoah Valley',
     'The Great Valley of Virginia goes by this name'),
+];
+
+/**
+ * The states Virginia touches. Directions are deliberately not used for the map
+ * questions — two states share "west" and two share "south", so "tap the state
+ * to the west" would have two right answers. The directional phrasing lives in
+ * VA_FACTS above, where it is worded to pick out one state; on the map the
+ * question is simply which shape is which.
+ */
+export const VA_BORDERS = [
+  { name: 'Maryland', tier: 1, side: 'north', blurb: 'borders Virginia to the north, across the Potomac River' },
+  { name: 'West Virginia', tier: 1, side: 'northwest', blurb: 'borders Virginia to the northwest' },
+  { name: 'North Carolina', tier: 1, side: 'south', blurb: 'borders Virginia to the south' },
+  { name: 'Tennessee', tier: 2, side: 'southwest', blurb: 'borders Virginia to the southwest' },
+  { name: 'Kentucky', tier: 3, side: 'west', blurb: 'touches Virginia’s far western tip' },
 ];

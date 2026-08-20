@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Virginia map preview</title>
+<!--
+  Preview for the generated Virginia map. Serve the repo (npm start) and open
+  http://localhost:8080/scripts/map-preview.html after running
+  scripts/build-virginia-map.mjs, to check the region boundary lines by eye.
+-->
+<body style="margin:0;background:#1b1464;font-family:system-ui;color:#fff">
+<div id="out" style="padding:16px"></div>
+<script type="module">
+import { VA_MAP, projectToMap } from '../src/data/virginia-map.js';
+import { VA_PLACES } from '../src/data/virginia.js';
+const COLORS = {
+  'coastal-plain': '#4fc3f7', piedmont: '#81c784', 'blue-ridge': '#ffb74d',
+  'valley-and-ridge': '#ba68c8', 'appalachian-plateau': '#e57373',
+};
+const paint = (viewBox, width, { labels = false, pins = false } = {}) => `<svg viewBox="${viewBox}" width="${width}">
+  ${VA_MAP.neighbours.map((n) => `<path d="${n.d}" fill="#2c2470" stroke="#4a3fa0" stroke-width="1.5"/>`).join('')}
+  ${VA_MAP.neighbours.map((n) => `<text x="${n.label[0]}" y="${n.label[1]}" fill="#8f88c8" font-size="15" text-anchor="middle">${n.name}</text>`).join('')}
+  ${VA_MAP.regions.map((r) => `<path d="${r.d}" fill="${COLORS[r.id]}" stroke="#1b1464" stroke-width="1.5"/>`).join('')}
+  <path d="${VA_MAP.outline}" fill="none" stroke="#fff" stroke-width="2.5"/>
+  ${pins ? VA_PLACES.filter((p) => p.coords).map((p) => {
+    const [x, y] = projectToMap(p.coords);
+    return `<circle cx="${x}" cy="${y}" r="4" fill="#111"/>`;
+  }).join('') : ''}
+  ${labels ? VA_MAP.regions.map((r) => `<text x="${r.label[0]}" y="${r.label[1]}" fill="#111" font-size="17" font-weight="700" text-anchor="middle">${r.short}</text>`).join('') : ''}
+</svg>`;
+document.getElementById('out').innerHTML = [
+  ['Whole map, with neighbouring states', VA_MAP.viewBox, 1100, { labels: true }],
+  ['Every place pin, to check they land in the right region', VA_MAP.viewBox, 1100, { pins: true }],
+].map(([title, vb, w, opts]) => `<h2 style="font-size:14px">${title}</h2>${paint(vb, w, opts)}`).join('');
+</script>
