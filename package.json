@@ -5,12 +5,15 @@
   "type": "module",
   "description": "A Kahoot-style geography game for kids: flash cards, multiple choice, and more, generated from one dataset.",
   "scripts": {
-    "start": "python3 -m http.server 8080",
+    "start": "node --disable-warning=ExperimentalWarning server.mjs",
     "test": "node --test test/*.test.js",
     "test:ui": "node test/ui-smoke.mjs"
   },
   "devDependencies": {
     "playwright": "^1.56.1",
     "polygon-clipping": "^0.15.7"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
   }
 }

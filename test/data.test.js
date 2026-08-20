@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { COUNTRIES } from '../src/data/countries.js';
+import { flagCode } from '../src/ui/flag.js';
 import { US_STATES } from '../src/data/us-states.js';
 import { WORLD_FACTS, WORLD_POOLS } from '../src/data/world-geography.js';
 import { US_FACTS, US_POOLS, US_REGIONS } from '../src/data/us-geography.js';
@@ -31,6 +33,19 @@ test('country rows are complete and unique', () => {
     assert.ok([1, 2, 3].includes(c.tier), `bad tier on ${c.name}`);
     assert.ok(!codes.has(c.code), `duplicate country code: ${c.code}`);
     codes.add(c.code);
+  }
+});
+
+test('every country has a committed flag image matching its emoji', () => {
+  // Emoji flags do not render on lots of devices, so the UI shows real images
+  // (src/ui/flag.js). A country whose emoji disagrees with its ISO code, or
+  // whose SVG was never fetched, would show the wrong flag or none at all.
+  for (const c of COUNTRIES) {
+    assert.equal(flagCode(c.flag), c.code.toLowerCase(),
+      `${c.name}: emoji ${c.flag} does not match code ${c.code}`);
+    const file = new URL(`../src/assets/flags/${c.code.toLowerCase()}.svg`, import.meta.url);
+    assert.ok(fs.existsSync(file), `${c.name}: missing flag image — run scripts/fetch-flags.mjs`);
+    assert.ok(fs.statSync(file).size > 0, `${c.name}: empty flag image`);
   }
 });
 

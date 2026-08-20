@@ -6,6 +6,7 @@
  * setup screen, the session, and the question generator do not change.
  */
 import { h, render } from './ui/dom.js';
+import { withFlags } from './ui/flag.js';
 import { createRng, randomSeed } from './lib/rng.js';
 import {
   CURRICULA,
@@ -18,6 +19,7 @@ import {
 } from './lib/generator.js';
 import { createSession, missedQuestions, standings } from './lib/session.js';
 import { runMultipleChoice } from './modes/multiple-choice.js';
+import { runHostFlow, runJoinFlow } from './modes/live.js';
 
 const app = document.getElementById('app');
 const STORE_KEY = 'geography-quest.settings';
@@ -120,6 +122,12 @@ function showSetup() {
       h('header.hero',
         h('h1.hero__title', '🌍 Geography Quest'),
         h('p.hero__sub', 'Pass the device around and see who knows the world best.'),
+        h('div.hero__links',
+          h('button.btn.btn--ghost', { type: 'button', onclick: showJoin },
+            '📡 Join a game'),
+          h('button.btn.btn--ghost', { type: 'button', onclick: showLeaderboard },
+            '🏆 Leaderboard'),
+        ),
       ),
 
       h('section.panel',
@@ -217,9 +225,72 @@ function showSetup() {
           // not trigger a re-render.
           onclick: () => startRound(playerNames()),
         }, 'Start'),
+        h('button.btn', {
+          type: 'button',
+          disabled: !ready || available === 0,
+          onclick: hostGame,
+        }, '📡 Host for other devices'),
       ),
     ),
   );
+}
+
+// ---------------------------------------------------------------- live play
+
+/** Host the configured round for other devices to join. */
+function hostGame() {
+  const hostName = playerNames()[0];
+  runHostFlow({
+    mount: app,
+    hostName,
+    // "Player 1" means nobody typed a name, so don't call it their game.
+    gameName: settings.players[0].trim() ? `${hostName}'s game` : 'Geography Quest',
+    settings: {
+      topics: settings.topics,
+      tiers: settings.tiers,
+      mapUse: settings.mapUse,
+      count: settings.count,
+      timerSeconds: settings.timerSeconds,
+    },
+    onExit: showSetup,
+  });
+}
+
+function showJoin() {
+  runJoinFlow({ mount: app, onExit: showSetup });
+}
+
+/** All-time standings across live games, served by the game server. */
+async function showLeaderboard() {
+  let players = null;
+  try {
+    const res = await fetch('/api/stats');
+    if (res.ok) ({ players } = await res.json());
+  } catch {
+    // Fall through to the "needs the server" message.
+  }
+
+  render(app,
+    h('section.screen.screen--leaderboard',
+      h('header.hero', h('h1.hero__title', '🏆 Leaderboard')),
+      players == null
+        ? h('section.panel',
+          h('p.hint', 'The leaderboard needs the game server — start the app with npm start.'))
+        : players.length === 0
+          ? h('section.panel',
+            h('p.hint', 'Nobody on the board yet. Finish a hosted game and the players land here.'))
+          : h('section.panel',
+            h('ol.alltime', players.map((p) =>
+              h('li.alltime__row',
+                h('span.alltime__name', p.name),
+                h('span.alltime__detail',
+                  `${p.games} game${p.games === 1 ? '' : 's'} · ${p.wins} win${p.wins === 1 ? '' : 's'}`
+                  + ` · ${p.correct} right`),
+                h('span.alltime__points', `${p.totalPoints} pts`),
+              )))),
+      h('div.actions',
+        h('button.btn.btn--primary', { type: 'button', onclick: showSetup }, 'Back')),
+    ));
 }
 
 // --------------------------------------------------------------------- round
@@ -264,9 +335,9 @@ function showResults(session) {
         h('h2.panel__title', `Worth another look (${missed.length})`),
         h('ul.review', missed.map((q) =>
           h('li.review__item',
-            h('span.review__front', q.card.hint ? `${q.card.hint} ` : '', q.card.front),
+            h('span.review__front', q.card.hint ? [withFlags(q.card.hint), ' '] : '', q.card.front),
             h('span.review__arrow', '→'),
-            h('span.review__back', q.card.back),
+            h('span.review__back', withFlags(q.card.back)),
           ))),
       ),
 

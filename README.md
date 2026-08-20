@@ -1,8 +1,8 @@
 # Geography Quest
 
-A Kahoot-style geography game for kids, aimed at roughly ages 8–12. Everyone
-plays on one device and passes it around. No accounts, no server, no build step
-— open it and play.
+A Kahoot-style geography game for kids, aimed at roughly ages 8–12. Play on one
+device and pass it around, or host a live game that everyone joins from their
+own phone or tablet. No accounts, no build step.
 
 Content is split into three curricula so a kid studying Virginia Studies is not
 quizzed on the capital of Uzbekistan:
@@ -21,15 +21,21 @@ four tiles — see below.
 ## Running it
 
 ```sh
-npm start           # serves the folder at http://localhost:8080
+npm install
+npm start           # the game server, at http://localhost:8080
 ```
 
-Any static file server works. ES modules do not load over `file://`, so the page
-has to be served rather than double-clicked. It deploys to GitHub Pages as-is.
+Other devices on the same network reach it at `http://<your-ip>:8080`. The
+node server (Node 22.5+) does three jobs: static files, the WebSocket hub for
+live games, and the all-time leaderboard.
+
+Solo pass-the-device play needs none of that — any static file server works
+(ES modules do not load over `file://`), and it deploys to GitHub Pages as-is;
+only hosting live games and the leaderboard require the real server.
 
 ```sh
-npm test            # unit tests, no dependencies needed
-npm run test:ui     # browser smoke test, needs `npm install` and a running server
+npm test            # unit tests, no browser needed
+npm run test:ui     # browser smoke test, needs `npm install` and `npm start` running
 ```
 
 ## The idea
@@ -83,6 +89,10 @@ A distractor only teaches something if a kid could believe it. Two rules:
 
 ```
 index.html
+server.mjs             static files + WebSocket hub + leaderboard API
+server/
+  live.js              rooms, joining, and the live question loop (transport-free)
+  stats.js             all-time player tracking, SQLite via node:sqlite
 src/
   app.js               setup and results screens, routing
   styles.css
@@ -99,15 +109,21 @@ src/
     generator.js       templates that turn data rows into questions
     session.js         queue, turn order, scoring, re-queueing (no DOM)
     rng.js             seeded RNG, so a round can be replayed exactly
+    net.js             WebSocket client for live games
   modes/
     multiple-choice.js the Kahoot-shaped mode, tiles or map
+    live.js            host and join flows for games across devices
   ui/
     dom.js
     map.js             the Virginia map as an answer surface
     us-map.js          the US map as question media (one state highlighted)
+    flag.js            flags as images — emoji flags don't render everywhere
+  assets/
+    flags/             one SVG per country (fetched once, committed)
 scripts/
   build-virginia-map.mjs   generates the Virginia region map (run by hand)
   build-us-map.mjs         generates the US state-shapes map (run by hand)
+  fetch-flags.mjs          downloads flag SVGs for countries.js (run by hand)
   map-preview.html         eyeball the generated map while tuning boundaries
 test/
   data.test.js         dataset integrity
@@ -115,7 +131,8 @@ test/
   session.test.js      scoring, streaks, re-queueing, turn rotation
   virginia-map.test.js the generated map matches the regions the quiz asks about
   us-map.test.js       the generated US map covers exactly the fifty states
-  ui-smoke.mjs         plays a full two-player round in a real browser
+  live.test.js         whole live games against the hub, plus the leaderboard
+  ui-smoke.mjs         full rounds in a real browser, incl. a three-device live game
 ```
 
 ## A note on Virginia content
@@ -195,6 +212,52 @@ the map and the answers cannot drift apart. That check caught two real errors �
 a plateau boundary drawn northwest of Wise and Norton, and a Blue Ridge boundary
 that put Mount Rogers in the valley.
 
+## Playing across devices
+
+One device hosts, the others join — the Kahoot shape:
+
+- **Hosting.** Build the round on the setup screen as usual, then press **Host
+  for other devices** instead of Start. The lobby shows who has joined; the
+  host paces the whole game and does not play.
+- **Joining.** Every open lobby on the network shows up under **Join a game** —
+  pick a name, tap a game. Up to 12 players.
+- **Playing.** Everyone answers every question at the same time on their own
+  device, tiles and map questions alike. The reveal waits for the last answer
+  (or the timer), shows each player what everyone did, and stays up until the
+  host presses Next — a parent reading the explanation aloud is the point of
+  playing together.
+
+The server is the referee. It generates the questions, keeps the answers to
+itself until the reveal (`server/live.js` strips them from the wire), enforces
+the deadline, and scores with the same rules as pass-the-device play: speed
+only ever *adds* points, so the slowest reader still scores for being right.
+There are no retries in a live round — everyone faces each question exactly
+once — so the requeue mechanic stays in pass-the-device mode.
+
+The hub is transport-free (connections are anything with a `send()`, time is
+injected), so `test/live.test.js` plays entire games — scoring, streaks,
+disconnects, forced reveals, deadline timeouts — with plain arrays and a
+hand-cranked clock. The browser smoke test then plays a real three-device game
+over actual WebSockets.
+
+Dropped connections are handled the way a living room needs: a player who
+vanishes mid-game keeps their score on the board and stops being waited for;
+if the host vanishes, the game ends and everyone is told.
+
+## Players and scores over time
+
+Every finished live game is recorded — SQLite via `node:sqlite`, built into
+Node, no dependency — as one `games` row plus a `results` row per player, in
+`data/geography-quest.db` (gitignored). Keeping per-game history rather than
+running totals means future features ("which questions does Maya keep
+missing?") are new queries, not a storage rewrite.
+
+Players are keyed by lowercased name: this is a family game on a home network,
+so "the same kid types the same name" is the identity model. The 🏆
+**Leaderboard** on the home screen (and the end of every live game) shows the
+all-time table — games, wins, points, right answers. Solo games count for
+points but not wins; beating nobody is not a win.
+
 ## The US state-shapes map
 
 The **Name the State** topic shows the whole country with one state lit up and
@@ -216,8 +279,9 @@ fifty rows in `us-states.js`.
 ## Adding content
 
 Add a row to `src/data/countries.js` and every template picks it up
-automatically — no other file changes. Same for `us-states.js` and the Virginia
-places. One-off facts that do not fit a relational shape (longest river, tallest
+automatically; run `node scripts/fetch-flags.mjs` once to pull the new
+country's flag image (a test fails until you do). Same for `us-states.js` and
+the Virginia places, with no extra step. One-off facts that do not fit a relational shape (longest river, tallest
 mountain, which state a landmark is in) go in the matching `*-geography.js` or
 `virginia.js` fact list, with a `pool` that wrong answers are drawn from.
 

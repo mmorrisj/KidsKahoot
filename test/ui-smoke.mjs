@@ -1,8 +1,9 @@
 /**
- * Browser smoke test: plays a full two-player round and asserts the app never
- * throws. Not part of `npm test` because it needs a browser — run it with
- * `npm run test:ui` (starts its own static server is NOT included: run
- * `npm start` in another terminal first, or set BASE_URL).
+ * Browser smoke test: plays full rounds — pass-the-device, map-only, and a
+ * live three-device game — and asserts the app never throws. Not part of
+ * `npm test` because it needs a browser: run `npm start` in another terminal
+ * (the live pass needs the real game server, not just static files, so set
+ * BASE_URL accordingly if you serve elsewhere), then `npm run test:ui`.
  *
  * Pass SHOTS=<dir> to also write screenshots of each screen.
  */
@@ -260,6 +261,120 @@ try {
     await page.click('.feedback .btn');
     if (await page.locator('.screen--results').count()) break;
   }
+
+  // ---- flag questions actually show flags -----------------------------------
+  // Flags are images, not emoji — emoji flags render as letter codes or empty
+  // boxes on many devices, which is no question at all.
+  await page.goto(BASE_URL);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.waitForSelector('.screen--setup');
+  await page.click('.chip:has-text("Virginia")');
+  await page.click('.chip:has-text("World")');
+  for (const topic of ['World Capitals', 'Continents', 'Rivers, Mountains & Landmarks']) {
+    await page.click(`.topic-group .chip:has-text("${topic}")`);
+  }
+  await page.click('.btn--xl:has-text("Start")');
+
+  for (let i = 0; i < 3; i++) {
+    await page.waitForSelector('.screen--question img.flag');
+    // A broken src never completes with a width, so this times out loudly.
+    await page.waitForFunction(() => [...document.querySelectorAll('img.flag')]
+      .every((img) => img.complete && img.naturalWidth > 0));
+    if (i === 0) await shoot(page, '19-flags');
+    await page.click('.tile >> nth=0');
+    await page.waitForSelector('.feedback');
+    await page.click('.feedback .btn');
+    if (await page.locator('.screen--results').count()) break;
+  }
+
+  // ---- a live game: one host, two players on their own devices -------------
+  // Needs the node server (npm start); a plain static server has no WebSocket.
+  const host = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+  watch(host, 'host');
+  await host.goto(BASE_URL);
+  await host.evaluate(() => localStorage.clear());
+  await host.reload();
+  await host.waitForSelector('.screen--setup');
+  await host.fill('.player-input >> nth=0', 'Dad');
+  await host.click('.btn:has-text("Host for other devices")');
+  await host.waitForSelector('.screen--lobby');
+  assert.ok((await host.textContent('.hero__title')).includes("Dad's game"));
+  assert.equal(await host.locator('.btn--xl[disabled]').count(), 1,
+    'starting with no players should be impossible');
+
+  const joiners = [];
+  for (const name of ['Maya', 'Sam']) {
+    const p = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true });
+    watch(p, `player-${name}`);
+    await p.goto(BASE_URL);
+    await p.evaluate(() => localStorage.clear());
+    await p.reload();
+    await p.click('.btn:has-text("Join a game")');
+    if (name === 'Maya') {
+      // Regression check: the 2s session poll used to redraw the whole screen,
+      // throwing focus out of the name box in the middle of typing.
+      await p.click('.player-input');
+      await p.keyboard.type(name.slice(0, 2));
+      await p.waitForTimeout(2400); // straddle at least one poll tick
+      assert.ok(await p.evaluate(() => document.activeElement.classList.contains('player-input')),
+        'the name box lost focus while the session list refreshed');
+      await p.keyboard.type(name.slice(2));
+      assert.equal(await p.inputValue('.player-input'), name);
+    } else {
+      await p.fill('.player-input', name);
+    }
+    await p.waitForSelector('.sessions__row');
+    assert.ok((await p.textContent('.sessions__name')).includes("Dad's game"),
+      'the hosted game should be listed for players');
+    await p.click('.sessions__row .btn');
+    await p.waitForSelector('.screen--lobby');
+    joiners.push(p);
+  }
+  const [maya, sam] = joiners;
+  await host.waitForSelector('.chip:has-text("Sam")');
+  await shoot(host, '14-live-lobby');
+
+  await host.click('.btn--xl:has-text("Start the game")');
+
+  for (let guard = 0; guard < 15; guard++) {
+    // A fresh question renders unlocked answers; the previous screen's stay locked.
+    for (const p of joiners) {
+      await p.waitForSelector('.live-answers:not(.live-answers--locked)');
+    }
+    if (guard === 0) await shoot(maya, '15-live-question');
+    await answerSomehow(maya);
+    await answerSomehow(sam);
+
+    await host.waitForSelector('.feedback');
+    assert.equal(await host.locator('.livewire__row').count(), 2,
+      'the host reveal should show one row per player');
+    if (guard === 0) await shoot(host, '16-live-reveal');
+
+    const advance = host.locator('.feedback .btn');
+    const label = await advance.textContent();
+    await advance.click();
+    if (label === 'See results') break;
+  }
+
+  await host.waitForSelector('.screen--results');
+  assert.equal(await host.locator('.scoreboard__row').count(), 2);
+  for (const p of joiners) {
+    await p.waitForSelector('.screen--results');
+    assert.ok(await p.locator('.alltime').count() >= 1,
+      'the final screen should carry the all-time leaderboard');
+  }
+  await shoot(host, '17-live-results');
+
+  // The finished game landed in the all-time stats.
+  await maya.click('.btn:has-text("Done")');
+  await maya.waitForSelector('.screen--setup');
+  await maya.click('.btn:has-text("Leaderboard")');
+  await maya.waitForSelector('.alltime__row');
+  const board = await maya.locator('.alltime__name').allTextContents();
+  assert.ok(board.includes('Maya') && board.includes('Sam'),
+    `both players should be on the leaderboard, got ${board.join(', ')}`);
+  await shoot(maya, '18-leaderboard');
 } finally {
   await browser.close();
 }

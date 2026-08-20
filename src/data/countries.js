@@ -7,8 +7,11 @@
  *   capital   Official capital. Where a country has more than one seat of
  *             government, the row carries a `note` explaining it.
  *   continent One of CONTINENTS (seven-continent model).
- *   flag      Emoji flag. Free, scales to any size, no image assets to ship.
- *   code      ISO 3166-1 alpha-2, used as a stable question id.
+ *   flag      Emoji flag — the compact id the data and tests speak. The UI
+ *             renders it as an image from src/assets/flags/ (see src/ui/flag.js),
+ *             because emoji flags do not render on many devices.
+ *   code      ISO 3166-1 alpha-2, used as a stable question id and as the
+ *             flag image's file name. Must agree with `flag`; a test checks.
  *   tier      1 = kids meet it constantly, 2 = shows up in school,
  *             3 = for the kid who already knows the tier-2 answers.
  *   traps     Famous cities in this country that are NOT the capital. The

@@ -14,6 +14,7 @@
 import { h, render } from '../ui/dom.js';
 import { regionLegend, renderMap } from '../ui/map.js';
 import { renderUsHighlight } from '../ui/us-map.js';
+import { flagNode, withFlags } from '../ui/flag.js';
 import {
   advance,
   current,
@@ -47,12 +48,15 @@ function renderTiles(question, onPick) {
     const tile = TILES[i % TILES.length];
     const button = h(`button.tile.${tile.cls}`, {
       type: 'button',
+      // The choice rides on a data attribute because flag choices render as
+      // an <img>, which leaves nothing useful in textContent to compare.
+      'data-choice': choice,
       onclick: () => onPick(choice),
       'aria-label': `${tile.label}: ${choice}`,
     },
       h('span.tile__shape', { 'aria-hidden': 'true' }, tile.shape),
       h('span.tile__text', { class: question.choiceStyle === 'emoji' ? 'tile__text--emoji' : '' },
-        choice),
+        question.choiceStyle === 'emoji' ? flagNode(choice, 'tile') : choice),
     );
     buttons.push(button);
     return button;
@@ -71,7 +75,7 @@ function renderTiles(question, onPick) {
     },
     showResult({ choice, answer }) {
       for (const button of buttons) {
-        const text = button.querySelector('.tile__text').textContent;
+        const text = button.dataset.choice;
         button.disabled = true;
         if (text === answer) button.classList.add('tile--correct');
         else if (text === choice) button.classList.add('tile--wrong');
@@ -81,7 +85,8 @@ function renderTiles(question, onPick) {
   };
 }
 
-function renderAnswers(question, onPick) {
+/** Exported for live mode, which renders the same questions on remote devices. */
+export function renderAnswers(question, onPick) {
   if (!question.map) return renderTiles(question, onPick);
   const map = renderMap(question, onPick);
   return {
@@ -91,6 +96,22 @@ function renderAnswers(question, onPick) {
     onKey: null,
     showResult: map.showResult,
   };
+}
+
+/** The white question card: media (flag or highlighted US map) plus the prompt. */
+export function renderPrompt(question) {
+  return h('div.prompt',
+    question.media && h('div.prompt__media',
+      {
+        class: question.media.kind === 'flag-large' ? 'prompt__media--large'
+          : question.media.kind === 'us-map' ? 'prompt__media--map' : '',
+      },
+      question.media.kind === 'us-map'
+        ? renderUsHighlight(question.media.value)
+        : flagNode(question.media.value,
+          question.media.kind === 'flag-large' ? 'large' : 'media')),
+    h('h2.prompt__text', question.prompt),
+  );
 }
 
 export function runMultipleChoice({ mount, session, onFinish }) {
@@ -162,18 +183,7 @@ export function runMultipleChoice({ mount, session, onFinish }) {
           h('span.qbar__score', `${player.score} pts`),
         ),
         attempt > 1 && h('p.retry-flag', '↻ Seen this one before — worth half points'),
-        h('div.prompt',
-          question.media && h('div.prompt__media',
-            {
-              class: question.media.kind === 'flag-large' ? 'prompt__media--large'
-                : question.media.kind === 'us-map' ? 'prompt__media--map' : '',
-            },
-            // Flags are emoji text; the US map is an inline SVG.
-            question.media.kind === 'us-map'
-              ? renderUsHighlight(question.media.value)
-              : question.media.value),
-          h('h2.prompt__text', question.prompt),
-        ),
+        renderPrompt(question),
         session.timerSeconds
           ? h('div.timer', h('div.timer__track', timerFill), timerLabel)
           : h('p.hint', 'No timer — take your time.'),
@@ -228,8 +238,9 @@ export function runMultipleChoice({ mount, session, onFinish }) {
       h('div.feedback',
         { class: result.correct ? 'feedback--good' : 'feedback--bad', role: 'status' },
         h('p.feedback__headline', headline),
-        !result.correct && h('p.feedback__answer', `The answer is ${question.answer}.`),
-        h('p.feedback__why', result.explanation),
+        !result.correct
+          && h('p.feedback__answer', 'The answer is ', ...withFlags(question.answer), '.'),
+        h('p.feedback__why', ...withFlags(result.explanation)),
         result.note && h('p.feedback__note', result.note),
         // Naming the regions is safe now that the answer is in, and it is the
         // moment a kid is most likely to actually read them.
