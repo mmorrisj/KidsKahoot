@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 // polygon-clipping is CommonJS, so it arrives as a default export.
 import pc from 'polygon-clipping';
 import { US_STATES } from '../src/data/us-states.js';
+import { asMulti, dissolve, pathFromMulti } from './lib/geo.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -87,14 +88,6 @@ async function loadCounties() {
   }
   return byState;
 }
-
-/** polygon-clipping wants MultiPolygon-shaped coordinates for everything. */
-const asMulti = (geometry) =>
-  (geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates);
-
-const dissolve = (features) => features
-  .slice(1)
-  .reduce((acc, f) => pc.union(acc, asMulti(f.geometry)), asMulti(features[0].geometry));
 
 /**
  * The Aleutians cross the antimeridian, so their longitudes arrive positive
@@ -162,84 +155,6 @@ function fitted(project, bounds, width, dx, dy) {
 // -------------------------------------------------------- simplify and emit
 // Same machinery as scripts/build-virginia-map.mjs.
 
-/** Douglas-Peucker. County outlines carry far more detail than a 1000px map. */
-function simplify(points, tolerance) {
-  if (points.length < 3) return points;
-  const [start] = points;
-  const end = points[points.length - 1];
-
-  let worst = 0;
-  let index = 0;
-  for (let i = 1; i < points.length - 1; i++) {
-    const d = perpendicularDistance(points[i], start, end);
-    if (d > worst) { worst = d; index = i; }
-  }
-  if (worst <= tolerance) return [start, end];
-
-  return [
-    ...simplify(points.slice(0, index + 1), tolerance).slice(0, -1),
-    ...simplify(points.slice(index), tolerance),
-  ];
-}
-
-function perpendicularDistance([px, py], [ax, ay], [bx, by]) {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const lengthSq = dx * dx + dy * dy;
-  if (lengthSq === 0) return Math.hypot(px - ax, py - ay);
-  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSq));
-  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
-}
-
-/** Shoelace. Used to drop slivers, rank rings, and place labels. */
-function ringArea(ring) {
-  let sum = 0;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    sum += (ring[j][0] * ring[i][1]) - (ring[i][0] * ring[j][1]);
-  }
-  return Math.abs(sum / 2);
-}
-
-function centroidOf(ring) {
-  let x = 0; let y = 0; let a = 0;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const cross = (ring[j][0] * ring[i][1]) - (ring[i][0] * ring[j][1]);
-    a += cross;
-    x += (ring[j][0] + ring[i][0]) * cross;
-    y += (ring[j][1] + ring[i][1]) * cross;
-  }
-  a *= 0.5;
-  if (a === 0) return ring[0];
-  return [x / (6 * a), y / (6 * a)];
-}
-
-/** MultiPolygon of lon/lat -> one SVG path string, plus a label anchor. */
-function toPath(multi, project) {
-  const rings = [];
-  for (const poly of multi) {
-    for (const ring of poly) {
-      const projected = ring.map(project);
-      const thin = simplify(projected, SIMPLIFY_TOLERANCE);
-      if (thin.length < 4 || ringArea(thin) < MIN_AREA) continue;
-      rings.push(thin);
-    }
-  }
-  if (!rings.length) return null;
-
-  const d = rings
-    .map((ring) => ring
-      .map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`)
-      .join('') + 'Z')
-    .join('');
-
-  const biggest = rings.reduce((a, b) => (ringArea(a) > ringArea(b) ? a : b));
-  const [cx, cy] = centroidOf(biggest);
-  // Area is shipped so the game can decide which states are too small to see
-  // when highlighted (Rhode Island) and need a ring drawn around them.
-  const area = Math.round(rings.reduce((sum, ring) => sum + ringArea(ring), 0));
-  return { d, area, label: [+cx.toFixed(1), +cy.toFixed(1)] };
-}
-
 // ---------------------------------------------------------------------- main
 
 const byState = await loadCounties();
@@ -305,7 +220,8 @@ const projectorFor = (name) =>
   (name === 'Alaska' ? alaskaFit : name === 'Hawaii' ? hawaiiFit : mainFit).project;
 
 const states = US_STATES.map(({ name, abbr }) => {
-  const shape = toPath(shapes.get(name), projectorFor(name));
+  const shape = pathFromMulti(shapes.get(name), projectorFor(name),
+    { tolerance: SIMPLIFY_TOLERANCE, minArea: MIN_AREA });
   if (!shape) throw new Error(`${name} came out empty — check the pipeline`);
   return { id: name.toLowerCase().replace(/[^a-z]+/g, '-'), name, abbr, ...shape };
 });

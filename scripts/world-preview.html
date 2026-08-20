@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>World map preview</title>
+<!-- Serve the repo (npm start) and open /scripts/world-preview.html after
+     running scripts/build-world-map.mjs, to check the map and the pins. -->
+<body style="margin:0;background:#1b1464;font-family:system-ui;color:#fff">
+<div id="out" style="padding:16px"></div>
+<script type="module">
+import { WORLD_MAP } from '../src/data/world-map.js';
+import { COUNTRIES } from '../src/data/countries.js';
+const COLORS = {
+  africa: '#f0a35e', antarctica: '#9fd3e8', asia: '#e2757c', europe: '#8fb7f0',
+  'north-america': '#7fc99a', oceania: '#c79ae0', 'south-america': '#e8c766',
+};
+const paint = (highlight, pinCodes) => `<svg viewBox="${WORLD_MAP.viewBox}" width="1100">
+  ${WORLD_MAP.continents.map((c) => `<path d="${c.d}" fill="${COLORS[c.id]}"
+     opacity="${!highlight || c.name === highlight ? 1 : 0.28}" stroke="#16143a" stroke-width="1"/>`).join('')}
+  ${WORLD_MAP.continents.map((c) => `<text x="${c.label[0]}" y="${c.label[1]}" font-size="16"
+     font-weight="700" fill="#16143a" text-anchor="middle">${c.name}</text>`).join('')}
+  ${(pinCodes ?? []).map((code) => {
+    const [x, y] = WORLD_MAP.pins[code];
+    return `<circle cx="${x}" cy="${y}" r="5" fill="#16143a" stroke="#fff" stroke-width="2"/>`;
+  }).join('')}
+</svg>`;
+document.getElementById('out').innerHTML = [
+  ['All 140 country pins', paint(null, Object.keys(WORLD_MAP.pins))],
+  ['Highlighting Africa, with Egypt pinned', paint('Africa', ['EG'])],
+  ['Highlighting Oceania, with the island nations pinned', paint('Oceania', ['AU','NZ','FJ','PG','WS','TO','VU','SB','PW','MH','KI','TV'])],
+].map(([t, svg]) => `<h2 style="font-size:14px">${t}</h2>${svg}`).join('');
+</script>

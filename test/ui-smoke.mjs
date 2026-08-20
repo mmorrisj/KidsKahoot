@@ -260,6 +260,43 @@ try {
     await page.click('.feedback .btn');
     if (await page.locator('.screen--results').count()) break;
   }
+
+  // ---- world questions show where the country is, after answering ---------
+  await phone.goto(BASE_URL);
+  await phone.evaluate(() => localStorage.clear());
+  await phone.reload();
+  await phone.waitForSelector('.screen--setup');
+  await phone.click('.chip:has-text("Virginia")'); // off
+  await phone.click('.chip:has-text("World")'); // on
+  await phone.click('.btn--xl:has-text("Start")');
+
+  let locatorsSeen = 0;
+  for (let i = 0; i < 25 && locatorsSeen < 2; i++) {
+    await phone.waitForSelector('.tile');
+    // The locator must not be on screen before the answer is in — it would
+    // give away a "which continent is this" question outright.
+    assert.equal(await phone.locator('.locator').count(), 0,
+      'the world map appeared before the question was answered');
+
+    await phone.click('.tile >> nth=0');
+    await phone.waitForSelector('.feedback');
+
+    if (await phone.locator('.locator').count()) {
+      locatorsSeen += 1;
+      assert.equal(await phone.locator('.locator__land--home').count(), 1,
+        'exactly one continent should be highlighted');
+      assert.equal(await phone.locator('.locator__pin').count(), 1, 'expected one pin');
+      assert.match(await phone.locator('.locator__caption').textContent(), /\sis in\s/);
+      if (locatorsSeen === 1) await shoot(phone, '13-world-locator');
+    }
+    if (await phone.locator('.screen--results').count()) break;
+    await phone.click('.feedback .btn');
+  }
+  assert.ok(locatorsSeen >= 2, `only ${locatorsSeen} world questions showed a locator map`);
+
+  const worldWidth = await phone.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  assert.ok(worldWidth <= 1, `the locator makes the page scroll sideways by ${worldWidth}px`);
 } finally {
   await browser.close();
 }
