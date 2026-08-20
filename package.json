@@ -1,0 +1,15 @@
+{
+  "name": "kids-kahoot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A Kahoot-style geography game for kids: flash cards, multiple choice, and more, generated from one dataset.",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test test/*.test.js",
+    "test:ui": "node test/ui-smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}
