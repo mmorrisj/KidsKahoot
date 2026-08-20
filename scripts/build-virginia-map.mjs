@@ -30,6 +30,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 // polygon-clipping is CommonJS, so it arrives as a default export.
 import pc from 'polygon-clipping';
+import { VA_PLACES } from '../src/data/virginia.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -40,6 +41,16 @@ const SOURCE_FILE = path.join(CACHE, 'us-counties.json');
 const OUT_FILE = path.join(ROOT, 'src/data/virginia-map.js');
 
 const VA_FIPS = '51';
+/** Everything Virginia touches, so "tap the state to the north" has something to tap. */
+const NEIGHBOUR_FIPS = {
+  24: 'Maryland',
+  54: 'West Virginia',
+  21: 'Kentucky',
+  47: 'Tennessee',
+  37: 'North Carolina',
+  11: 'Washington, D.C.',
+};
+const FRAME_PAD = 0.75; // degrees of neighbouring state to keep around Virginia
 const OUT_WIDTH = 1000;
 const SIMPLIFY_TOLERANCE = 0.9; // in output units; ~1 mile at this scale
 const MIN_AREA = 12; // drop slivers smaller than this many square output units
@@ -80,40 +91,18 @@ const BOUNDARIES = {
 };
 
 /**
- * Places whose region the game already asserts in src/data/virginia.js, with
- * coordinates, used to check the boundary lines above. If a line drifts, the
- * build fails here rather than shipping a map that disagrees with the answers.
- *
- * This is how the plateau line was caught sitting northwest of Wise and Norton.
+ * The regions of virginia.js, and their short names, are the contract this map
+ * has to honour. Every place in VA_PLACES with a region is point-tested against
+ * the shapes generated below, and the build fails if one lands in the wrong
+ * region — so the map can never disagree with an answer the game gives.
  */
-const ANCHORS = [
-  ['Virginia Beach', -75.98, 36.85, 'coastal-plain'],
-  ['Norfolk', -76.29, 36.85, 'coastal-plain'],
-  ['Newport News', -76.43, 37.09, 'coastal-plain'],
-  ['Williamsburg', -76.71, 37.27, 'coastal-plain'],
-  ['Jamestown', -76.78, 37.21, 'coastal-plain'],
-  ['Charlottesville', -78.48, 38.03, 'piedmont'],
-  ['Monticello', -78.45, 38.01, 'piedmont'],
-  ['Lynchburg', -79.14, 37.41, 'piedmont'],
-  ['Danville', -79.40, 36.59, 'piedmont'],
-  ['Appomattox Court House', -78.80, 37.38, 'piedmont'],
-  ['Manassas', -77.48, 38.75, 'piedmont'],
-  ['Mount Rogers', -81.54, 36.66, 'blue-ridge'],
-  ['Big Meadows (Skyline Drive)', -78.44, 38.52, 'blue-ridge'],
-  ['Roanoke', -79.94, 37.27, 'valley-and-ridge'],
-  ['Winchester', -78.16, 39.19, 'valley-and-ridge'],
-  ['Harrisonburg', -78.87, 38.45, 'valley-and-ridge'],
-  ['Staunton', -79.07, 38.15, 'valley-and-ridge'],
-  ['Lexington', -79.44, 37.78, 'valley-and-ridge'],
-  ['Luray Caverns', -78.46, 38.67, 'valley-and-ridge'],
-  ['Natural Bridge', -79.54, 37.63, 'valley-and-ridge'],
-  ['Marion', -81.51, 36.83, 'valley-and-ridge'],
-  ['Abingdon', -81.98, 36.71, 'valley-and-ridge'],
-  ['Galax', -80.92, 36.66, 'blue-ridge'],
-  ['Wise', -82.58, 36.98, 'appalachian-plateau'],
-  ['Norton', -82.63, 36.93, 'appalachian-plateau'],
-  ['Big Stone Gap', -82.78, 36.87, 'appalachian-plateau'],
-];
+const REGION_IDS = {
+  'Coastal Plain': 'coastal-plain',
+  Piedmont: 'piedmont',
+  'Blue Ridge Mountains': 'blue-ridge',
+  'Valley and Ridge': 'valley-and-ridge',
+  'Appalachian Plateau': 'appalachian-plateau',
+};
 
 const REGIONS = [
   { id: 'coastal-plain', short: 'Coastal Plain' },
@@ -134,9 +123,15 @@ async function loadCounties() {
     fs.writeFileSync(SOURCE_FILE, Buffer.from(await res.arrayBuffer()));
   }
   const geo = JSON.parse(fs.readFileSync(SOURCE_FILE, 'utf8'));
-  const va = geo.features.filter((f) => String(f.properties.STATE) === VA_FIPS);
+  const byState = new Map();
+  for (const feature of geo.features) {
+    const fips = String(feature.properties.STATE);
+    if (!byState.has(fips)) byState.set(fips, []);
+    byState.get(fips).push(feature);
+  }
+  const va = byState.get(VA_FIPS) ?? [];
   if (va.length < 100) throw new Error(`expected ~134 Virginia features, got ${va.length}`);
-  return va;
+  return { va, byState };
 }
 
 /** polygon-clipping wants MultiPolygon-shaped coordinates for everything. */
@@ -193,18 +188,33 @@ function pointInMulti(point, multi) {
   return false;
 }
 
-function checkAnchors(sliced) {
+function checkPlaces(sliced) {
   const failures = [];
-  for (const [name, lon, lat, expected] of ANCHORS) {
-    const landedIn = Object.keys(sliced).filter((id) => pointInMulti([lon, lat], sliced[id]));
+  let checked = 0;
+
+  for (const place of VA_PLACES) {
+    if (!place.coords) throw new Error(`${place.name} has no coordinates`);
+    const landedIn = Object.keys(sliced).filter((id) => pointInMulti(place.coords, sliced[id]));
+
+    // Fall Line cities have no region in the data, but they still have to land
+    // somewhere on the map rather than in the ocean.
+    if (place.fallLine) {
+      if (!landedIn.length) failures.push(`  ${place.name}: fell outside Virginia entirely`);
+      continue;
+    }
+
+    checked += 1;
+    const expected = REGION_IDS[place.region];
     if (landedIn.length !== 1 || landedIn[0] !== expected) {
-      failures.push(`  ${name}: expected ${expected}, got ${landedIn.join(' + ') || 'nothing'}`);
+      failures.push(`  ${place.name}: virginia.js says ${place.region}, the map says `
+        + `${landedIn.join(' + ') || 'nothing'}`);
     }
   }
+
   if (failures.length) {
-    throw new Error(`region boundaries disagree with the quiz data:\n${failures.join('\n')}`);
+    throw new Error(`the map disagrees with virginia.js:\n${failures.join('\n')}`);
   }
-  process.stdout.write(`all ${ANCHORS.length} anchor places landed in the right region\n`);
+  process.stdout.write(`all ${checked} placed localities landed in the right region\n`);
 }
 
 // ---------------------------------------------------------------- projection
@@ -221,6 +231,14 @@ function makeProjector(bounds) {
   const scale = OUT_WIDTH / spanX;
   return {
     height: +(spanY * scale).toFixed(1),
+    // Shipped with the map so the game can place a pin on any [lon, lat]
+    // without re-deriving the projection.
+    params: {
+      minLon: +bounds.minLon.toFixed(6),
+      maxLat: +bounds.maxLat.toFixed(6),
+      squeeze: +squeeze.toFixed(6),
+      scale: +scale.toFixed(4),
+    },
     project: ([lon, lat]) => [
       (lon - bounds.minLon) * squeeze * scale,
       (bounds.maxLat - lat) * scale, // SVG y grows downward
@@ -318,17 +336,21 @@ function toPath(multi, project) {
 
   const biggest = rings.reduce((a, b) => (ringArea(a) > ringArea(b) ? a : b));
   const [cx, cy] = centroidOf(biggest);
-  return { d, label: [+cx.toFixed(1), +cy.toFixed(1)] };
+  // Area is shipped so the game can stack small targets above large ones when
+  // hit-testing; the Blue Ridge is a sliver and would otherwise be untappable.
+  const area = Math.round(rings.reduce((sum, ring) => sum + ringArea(ring), 0));
+  return { d, area, label: [+cx.toFixed(1), +cy.toFixed(1)] };
 }
 
 // ---------------------------------------------------------------------- main
 
-const counties = await loadCounties();
+const { va: counties, byState } = await loadCounties();
 
-let state = asMulti(counties[0].geometry);
-for (const feature of counties.slice(1)) {
-  state = pc.union(state, asMulti(feature.geometry));
-}
+const dissolve = (features) => features
+  .slice(1)
+  .reduce((acc, f) => pc.union(acc, asMulti(f.geometry)), asMulti(features[0].geometry));
+
+const state = dissolve(counties);
 process.stdout.write(`unioned ${counties.length} Virginia localities\n`);
 
 const eastOf = (name) => halfPlane(BOUNDARIES[name], 'east');
@@ -350,9 +372,27 @@ sliced['valley-and-ridge'] = pc.difference(
   sliced['appalachian-plateau'],
 );
 
-checkAnchors(sliced);
+checkPlaces(sliced);
 
-const { height, project } = makeProjector(boundsOf(state));
+// Neighbouring states, trimmed to a frame around Virginia so the file stays
+// small and the map stays centred on Virginia.
+const vaBounds = boundsOf(state);
+const frame = [[[
+  [vaBounds.minLon - FRAME_PAD, vaBounds.minLat - FRAME_PAD],
+  [vaBounds.maxLon + FRAME_PAD, vaBounds.minLat - FRAME_PAD],
+  [vaBounds.maxLon + FRAME_PAD, vaBounds.maxLat + FRAME_PAD],
+  [vaBounds.minLon - FRAME_PAD, vaBounds.maxLat + FRAME_PAD],
+  [vaBounds.minLon - FRAME_PAD, vaBounds.minLat - FRAME_PAD],
+]]];
+
+const neighbourShapes = Object.entries(NEIGHBOUR_FIPS).map(([fips, name]) => {
+  const features = byState.get(fips);
+  if (!features) throw new Error(`no county data for FIPS ${fips} (${name})`);
+  return { fips, name, geom: pc.intersection(dissolve(features), frame) };
+}).filter((n) => n.geom.length);
+
+// The frame, not Virginia, sets the viewBox, so neighbours are not cut off.
+const { height, project, params } = makeProjector(boundsOf(frame));
 
 const outline = toPath(state, project);
 const regions = REGIONS.map((region) => {
@@ -360,6 +400,26 @@ const regions = REGIONS.map((region) => {
   if (!shape) throw new Error(`${region.id} came out empty — check its boundary lines`);
   return { ...region, ...shape };
 });
+
+const neighbours = neighbourShapes.map(({ name, geom }) => {
+  const shape = toPath(geom, project);
+  if (!shape) throw new Error(`${name} came out empty after clipping to the frame`);
+  return { id: name.toLowerCase().replace(/[^a-z]+/g, '-'), name, ...shape };
+});
+
+// Region and pin questions do not need the neighbouring states in shot, and on
+// a phone that framing shrinks Virginia by about a third. Ship a tighter box to
+// crop to when the neighbours are only scenery.
+const outlineNumbers = outline.d.match(/-?\d+(\.\d+)?/g).map(Number);
+const outlineXs = outlineNumbers.filter((_, i) => i % 2 === 0);
+const outlineYs = outlineNumbers.filter((_, i) => i % 2 === 1);
+const CROP_MARGIN = 14;
+const focusBox = [
+  Math.max(0, Math.min(...outlineXs) - CROP_MARGIN),
+  Math.max(0, Math.min(...outlineYs) - CROP_MARGIN),
+  Math.min(OUT_WIDTH, Math.max(...outlineXs) + CROP_MARGIN) - Math.max(0, Math.min(...outlineXs) - CROP_MARGIN),
+  Math.min(height, Math.max(...outlineYs) + CROP_MARGIN) - Math.max(0, Math.min(...outlineYs) - CROP_MARGIN),
+].map((n) => +n.toFixed(1));
 
 const banner = `/**
  * GENERATED by scripts/build-virginia-map.mjs — do not edit by hand.
@@ -374,21 +434,42 @@ const body = `${banner}
 
 export const VA_MAP = {
   viewBox: '0 0 ${OUT_WIDTH} ${height}',
+  // Cropped to Virginia alone, for questions where the neighbours are scenery.
+  focusBox: '${focusBox.join(' ')}',
+  // Turn any [longitude, latitude] into map coordinates, for dropping pins.
+  projection: ${JSON.stringify(params)},
   outline: '${outline.d}',
   regions: [
 ${regions.map((r) => `    {
       id: '${r.id}',
       short: '${r.short}',
+      area: ${r.area},
       label: [${r.label[0]}, ${r.label[1]}],
       d: '${r.d}',
     },`).join('\n')}
   ],
+  neighbours: [
+${neighbours.map((n) => `    {
+      id: '${n.id}',
+      name: '${n.name}',
+      area: ${n.area},
+      label: [${n.label[0]}, ${n.label[1]}],
+      d: '${n.d}',
+    },`).join('\n')}
+  ],
 };
+
+/** [longitude, latitude] -> [x, y] in the map's viewBox. */
+export function projectToMap([lon, lat]) {
+  const { minLon, maxLat, squeeze, scale } = VA_MAP.projection;
+  return [(lon - minLon) * squeeze * scale, (maxLat - lat) * scale];
+}
 `;
 
 fs.writeFileSync(OUT_FILE, body);
 const kb = (Buffer.byteLength(body) / 1024).toFixed(1);
 process.stdout.write(`wrote ${path.relative(ROOT, OUT_FILE)} (${kb} kB)\n`);
-for (const r of regions) {
-  process.stdout.write(`  ${r.short.padEnd(22)} ${String(r.d.length).padStart(6)} chars\n`);
+for (const r of [...regions, ...neighbours]) {
+  const name = r.short ?? r.name;
+  process.stdout.write(`  ${name.padEnd(22)} ${String(r.d.length).padStart(6)} chars\n`);
 }

@@ -9,9 +9,11 @@ import { h, render } from './ui/dom.js';
 import { createRng, randomSeed } from './lib/rng.js';
 import {
   CURRICULA,
+  MAP_USES,
   TIERS,
   countAvailable,
   generateQuestions,
+  hasMapQuestions,
   topicsIn,
 } from './lib/generator.js';
 import { createSession, missedQuestions, standings } from './lib/session.js';
@@ -21,7 +23,7 @@ const app = document.getElementById('app');
 const STORE_KEY = 'geography-quest.settings';
 // Bump when the shape of a saved setting changes, so old saves are discarded
 // rather than silently selecting topics that no longer exist.
-const SETTINGS_VERSION = 2;
+const SETTINGS_VERSION = 3;
 const MAX_PLAYERS = 6;
 const ROUND_LENGTHS = [10, 15, 20];
 const TIMER_OPTIONS = [
@@ -38,6 +40,7 @@ const defaultSettings = () => ({
   curricula: ['virginia'],
   topics: topicsIn('virginia').map((t) => t.id),
   tiers: [1, 2],
+  mapUse: 'both',
   count: 10,
   timerSeconds: null,
 });
@@ -89,7 +92,12 @@ function playerNames() {
 }
 
 function showSetup() {
-  const available = countAvailable({ topics: settings.topics, tiers: settings.tiers });
+  const available = countAvailable({
+    topics: settings.topics,
+    tiers: settings.tiers,
+    mapUse: settings.mapUse,
+  });
+  const mapPossible = hasMapQuestions(settings.topics);
   const ready = settings.topics.length > 0 && settings.tiers.length > 0;
 
   const update = (patch) => {
@@ -163,6 +171,14 @@ function showSetup() {
           )),
       ),
 
+      mapPossible && h('section.panel',
+        h('h2.panel__title', 'How do they answer?'),
+        h('div.chips', MAP_USES.map((m) =>
+          chip(m.label, settings.mapUse === m.id,
+            () => update({ mapUse: m.id }), m.blurb))),
+        h('p.hint', 'Map questions are answered by tapping Virginia itself.'),
+      ),
+
       h('section.panel',
         h('h2.panel__title', 'How hard?'),
         h('div.chips', TIERS.map((t) =>
@@ -212,6 +228,7 @@ function startRound(players) {
     rng: createRng(randomSeed()),
     topics: settings.topics,
     tiers: settings.tiers,
+    mapUse: settings.mapUse,
     count: settings.count,
   });
   playSession(createSession({ questions, players, timerSeconds: settings.timerSeconds }));

@@ -4,8 +4,15 @@
  * Reads questions from a session and renders them; it knows nothing about where
  * the questions came from. Flash cards and the Jeopardy board will plug into
  * the same session the same way.
+ *
+ * A question is answered either by pressing one of four coloured tiles or by
+ * tapping a shape on the Virginia map, depending on whether the generator gave
+ * it a `map`. Everything around that — the timer, scoring, hand-off, feedback,
+ * re-queueing — is identical either way, so the two share this module rather
+ * than forking into two modes.
  */
 import { h, render } from '../ui/dom.js';
+import { regionLegend, renderMap } from '../ui/map.js';
 import {
   advance,
   current,
@@ -25,6 +32,66 @@ const TILES = [
   { shape: '■', label: 'square', cls: 'tile--d' },
 ];
 
+/**
+ * The four-tile answer grid.
+ *
+ * Both answer surfaces return the same shape — a node, a way to focus it, a way
+ * to mark the result, and optionally a key handler — so the round loop below
+ * does not care which one it is holding.
+ */
+function renderTiles(question, onPick) {
+  const buttons = [];
+
+  const node = h('div.tiles', question.choices.map((choice, i) => {
+    const tile = TILES[i % TILES.length];
+    const button = h(`button.tile.${tile.cls}`, {
+      type: 'button',
+      onclick: () => onPick(choice),
+      'aria-label': `${tile.label}: ${choice}`,
+    },
+      h('span.tile__shape', { 'aria-hidden': 'true' }, tile.shape),
+      h('span.tile__text', { class: question.choiceStyle === 'emoji' ? 'tile__text--emoji' : '' },
+        choice),
+    );
+    buttons.push(button);
+    return button;
+  }));
+
+  return {
+    node,
+    hint: 'Tip: press 1, 2, 3 or 4 to answer',
+    focusFirst() {},
+    onKey(e) {
+      const n = Number(e.key);
+      if (n >= 1 && n <= buttons.length) {
+        e.preventDefault();
+        buttons[n - 1].click();
+      }
+    },
+    showResult({ choice, answer }) {
+      for (const button of buttons) {
+        const text = button.querySelector('.tile__text').textContent;
+        button.disabled = true;
+        if (text === answer) button.classList.add('tile--correct');
+        else if (text === choice) button.classList.add('tile--wrong');
+        else button.classList.add('tile--muted');
+      }
+    },
+  };
+}
+
+function renderAnswers(question, onPick) {
+  if (!question.map) return renderTiles(question, onPick);
+  const map = renderMap(question, onPick);
+  return {
+    node: h('div.map-wrap', map.node),
+    hint: 'Tap the map. Use Tab and Enter if you would rather use the keyboard.',
+    focusFirst: map.focusFirst,
+    onKey: null,
+    showResult: map.showResult,
+  };
+}
+
 export function runMultipleChoice({ mount, session, onFinish }) {
   let stopTimer = null;
   let keyHandler = null;
@@ -39,7 +106,7 @@ export function runMultipleChoice({ mount, session, onFinish }) {
   function bindKeys(handler) {
     if (keyHandler) document.removeEventListener('keydown', keyHandler);
     keyHandler = handler;
-    document.addEventListener('keydown', keyHandler);
+    if (handler) document.addEventListener('keydown', handler);
   }
 
   function step() {
@@ -77,22 +144,14 @@ export function runMultipleChoice({ mount, session, onFinish }) {
 
     const timerFill = h('div.timer__fill');
     const timerLabel = h('span.timer__label');
-    const buttons = [];
 
-    const grid = h('div.tiles', question.choices.map((choice, i) => {
-      const tile = TILES[i % TILES.length];
-      const button = h(`button.tile.${tile.cls}`, {
-        type: 'button',
-        onclick: () => answer(choice),
-        'aria-label': `${tile.label}: ${choice}`,
-      },
-        h('span.tile__shape', { 'aria-hidden': 'true' }, tile.shape),
-        h('span.tile__text', { class: question.choiceStyle === 'emoji' ? 'tile__text--emoji' : '' },
-          choice),
-      );
-      buttons.push(button);
-      return button;
-    }));
+    let answered = false;
+    const answers = renderAnswers(question, (choice) => {
+      if (answered) return;
+      answered = true;
+      const secondsLeft = stopTimer ? stopTimer() : null;
+      showFeedback(submitAnswer(session, { choice, secondsLeft }), answers, question);
+    });
 
     render(mount,
       h('section.screen.screen--question',
@@ -111,30 +170,19 @@ export function runMultipleChoice({ mount, session, onFinish }) {
         session.timerSeconds
           ? h('div.timer', h('div.timer__track', timerFill), timerLabel)
           : h('p.hint', 'No timer — take your time.'),
-        grid,
-        h('p.hint.hint--keys', 'Tip: press 1, 2, 3 or 4 to answer'),
+        answers.node,
+        h('p.hint.hint--keys', answers.hint),
       ),
     );
 
     if (session.timerSeconds) startTimer(timerFill, timerLabel);
-    bindKeys((e) => {
-      const n = Number(e.key);
-      if (n >= 1 && n <= buttons.length) { e.preventDefault(); buttons[n - 1].click(); }
-    });
-
-    let answered = false;
-    function answer(choice) {
-      if (answered) return;
-      answered = true;
-      const secondsLeft = stopTimer ? stopTimer() : null;
-      const result = submitAnswer(session, { choice, secondsLeft });
-      showFeedback(result, buttons, question);
-    }
+    bindKeys(answers.onKey);
+    answers.focusFirst();
 
     function onExpire() {
       if (answered) return;
       answered = true;
-      showFeedback(submitTimeout(session), buttons, question);
+      showFeedback(submitTimeout(session), answers, question);
     }
 
     function startTimer(fill, label) {
@@ -158,16 +206,9 @@ export function runMultipleChoice({ mount, session, onFinish }) {
     }
   }
 
-  function showFeedback(result, buttons, question) {
-    if (keyHandler) document.removeEventListener('keydown', keyHandler);
-
-    for (const button of buttons) {
-      const text = button.querySelector('.tile__text').textContent;
-      button.disabled = true;
-      if (text === question.answer) button.classList.add('tile--correct');
-      else if (text === result.choice) button.classList.add('tile--wrong');
-      else button.classList.add('tile--muted');
-    }
+  function showFeedback(result, answers, question) {
+    bindKeys(null);
+    answers.showResult({ choice: result.choice, answer: question.answer });
 
     const next = h('button.btn.btn--primary', { onclick: () => { advance(session); step(); } },
       session.index + 1 >= session.queue.length ? 'See results' : 'Next question');
@@ -183,6 +224,9 @@ export function runMultipleChoice({ mount, session, onFinish }) {
         !result.correct && h('p.feedback__answer', `The answer is ${question.answer}.`),
         h('p.feedback__why', result.explanation),
         result.note && h('p.feedback__note', result.note),
+        // Naming the regions is safe now that the answer is in, and it is the
+        // moment a kid is most likely to actually read them.
+        question.map?.layer === 'regions' && regionLegend(),
         result.correct && h('p.feedback__points',
           `+${result.points}${result.streak >= 3 ? ` · ${result.streak} in a row!` : ''}`),
         !result.correct && !result.isRetry
@@ -194,7 +238,7 @@ export function runMultipleChoice({ mount, session, onFinish }) {
     bindKeys((e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); next.click(); }
     });
-    // On a phone the feedback lands below the answer tiles, off screen.
+    // On a phone the feedback lands below the answers, off screen.
     next.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     next.focus({ preventScroll: true });
   }
