@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Virginia map preview</title>
+<!--
+  Preview for the generated Virginia map. Serve the repo (npm start) and open
+  http://localhost:8080/scripts/map-preview.html after running
+  scripts/build-virginia-map.mjs, to check the region boundary lines by eye.
+-->
+<body style="margin:0;background:#1b1464;font-family:system-ui;color:#fff">
+<div id="out" style="padding:16px"></div>
+<script type="module">
+import { VA_MAP } from '../src/data/virginia-map.js';
+const COLORS = {
+  'coastal-plain': '#4fc3f7', piedmont: '#81c784', 'blue-ridge': '#ffb74d',
+  'valley-and-ridge': '#ba68c8', 'appalachian-plateau': '#e57373',
+};
+const paint = (viewBox, width, labels) => `<svg viewBox="${viewBox}" width="${width}">
+  ${VA_MAP.regions.map((r) => `<path d="${r.d}" fill="${COLORS[r.id]}" stroke="#1b1464" stroke-width="1.5"/>`).join('')}
+  <path d="${VA_MAP.outline}" fill="none" stroke="#fff" stroke-width="2.5"/>
+  ${labels ? VA_MAP.regions.map((r) => `<text x="${r.label[0]}" y="${r.label[1]}" fill="#111" font-size="18" font-weight="700" text-anchor="middle">${r.short}</text>`).join('') : ''}
+</svg>`;
+document.getElementById('out').innerHTML = [
+  ['Whole state', VA_MAP.viewBox, 1100, true],
+  ['Chesapeake Bay and the Eastern Shore', '660 20 340 300', 900, false],
+  ['Southwest tail', '0 300 400 140', 900, false],
+].map(([title, vb, w, labels]) => `<h2 style="font-size:14px">${title}</h2>${paint(vb, w, labels)}`).join('');
+</script>

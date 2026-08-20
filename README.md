@@ -85,6 +85,7 @@ src/
   styles.css
   data/
     virginia.js        five regions, 39 places, rivers, borders, Fall Line
+    virginia-map.js    GENERATED — state outline and five region shapes as SVG
     us-states.js       all 50 states: capital, region, abbreviation, traps
     us-geography.js    US rivers, mountains, Great Lakes, landmarks, parks
     countries.js       140 countries: capital, continent, flag, tier, traps
@@ -97,10 +98,14 @@ src/
   modes/
     multiple-choice.js the Kahoot-shaped mode
   ui/dom.js
+scripts/
+  build-virginia-map.mjs   generates the Virginia region map (run by hand)
+  map-preview.html         eyeball the generated map while tuning boundaries
 test/
   data.test.js         dataset integrity
   generator.test.js    the answer is always present, distractors are plausible
   session.test.js      scoring, streaks, re-queueing, turn rotation
+  virginia-map.test.js the generated map matches the regions the quiz asks about
   ui-smoke.mjs         plays a full two-player round in a real browser
 ```
 
@@ -114,6 +119,35 @@ are never asked "which region are you in".** All four grew up *on* the Fall Line
 and classroom materials disagree about which region to put them in, so the game
 does not pick a side — the Fall Line gets its own questions instead. Those four
 rows carry a `fallLine` flag, and a test asserts the region question skips them.
+
+## The Virginia region map
+
+`src/data/virginia-map.js` is generated, not written. It holds the Virginia
+outline plus the five region shapes as inline SVG paths, about 9 kB total, with
+no runtime dependency on anything.
+
+```sh
+npm install                            # polygon-clipping, build-time only
+node scripts/build-virginia-map.mjs    # writes src/data/virginia-map.js
+npm start                              # then open /scripts/map-preview.html
+```
+
+The state outline is the union of real county polygons from the US Census
+cartographic boundary files (public domain), which is what gives the Eastern
+Shore, the Chesapeake, and the southwest tail their correct shapes.
+
+The five regions are **not** built by grouping counties. That approach fails for
+the Blue Ridge: in northern Virginia it is a ridge a few miles wide, so no county
+there sits entirely inside it, and a county map would erase the region exactly
+where a kid is asked to point at it. Instead the outline is sliced by four
+boundary polylines, which is also how the maps in Virginia Studies materials are
+drawn.
+
+Those polylines are the one hand-placed thing in the pipeline, so the build
+checks them: 26 places whose region `virginia.js` already asserts are tested
+against the sliced shapes, and the build fails if any lands in the wrong one.
+That check caught two real errors — a plateau boundary drawn northwest of Wise
+and Norton, and a Blue Ridge boundary that put Mount Rogers in the valley.
 
 ## Adding content
 
