@@ -20,7 +20,7 @@ import { createSession, missedQuestions, standings } from './lib/session.js';
 import { runMultipleChoice } from './modes/multiple-choice.js';
 
 const app = document.getElementById('app');
-const STORE_KEY = 'geography-quest.settings';
+const STORE_KEY = 'kids-quiz-quest.settings';
 // Bump when the shape of a saved setting changes, so old saves are discarded
 // rather than silently selecting topics that no longer exist — or, as with the
 // "Name the State" topic, silently omitting ones that now do.
@@ -118,8 +118,8 @@ function showSetup() {
   render(app,
     h('section.screen.screen--setup',
       h('header.hero',
-        h('h1.hero__title', '🌍 Geography Quest'),
-        h('p.hero__sub', 'Pass the device around and see who knows the world best.'),
+        h('h1.hero__title', '🎯 Kids Quiz Quest'),
+        h('p.hero__sub', 'Pass the device around and see who knows the most.'),
       ),
 
       h('section.panel',

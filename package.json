@@ -1,11 +1,11 @@
 {
-  "name": "kids-kahoot",
+  "name": "kids-quiz-quest",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A Kahoot-style geography game for kids: flash cards, multiple choice, and more, generated from one dataset.",
+  "description": "A Kahoot-style quiz game for kids, generated from datasets rather than hand-authored. Geography first, with room for other subjects.",
   "scripts": {
-    "start": "python3 -m http.server 8080",
+    "start": "node scripts/serve.mjs",
     "test": "node --test test/*.test.js",
     "test:ui": "node test/ui-smoke.mjs"
   },
