@@ -1,11 +1,15 @@
-# Geography Quest
+# Kids Quiz Quest
 
-A Kahoot-style geography game for kids, aimed at roughly ages 8–12. Everyone
-plays on one device and passes it around. No accounts, no server, no build step
-— open it and play.
+A Kahoot-style quiz game for kids, aimed at roughly ages 8–12. Everyone plays on
+one device and passes it around. No accounts, no server, no build step — open it
+and play.
 
-Content is split into three curricula so a kid studying Virginia Studies is not
-quizzed on the capital of Uzbekistan:
+**Geography is the only subject so far**, but the name is deliberately not tied
+to it: math and history are the intended next ones, and nothing in the engine
+is geography-specific. See *Adding a subject* below for where the seam is.
+
+Geography content is split into three curricula so a kid studying Virginia
+Studies is not quizzed on the capital of Uzbekistan:
 
 | Curriculum | Topics | Questions |
 | --- | --- | --- |
@@ -21,11 +25,19 @@ four tiles — see below.
 ## Running it
 
 ```sh
-npm start           # serves the folder at http://localhost:8080
+npm start           # http://localhost:8080, no dependencies needed
 ```
 
-Any static file server works. ES modules do not load over `file://`, so the page
-has to be served rather than double-clicked. It deploys to GitHub Pages as-is.
+ES modules do not load over `file://`, so the page has to be served rather than
+double-clicked. It deploys to GitHub Pages as-is.
+
+`npm start` runs `scripts/serve.mjs`, a twenty-line static server whose only
+distinguishing feature is that it sends `Cache-Control: no-store`. Browsers
+cache ES modules aggressively, and a plain static server lets them: pull a
+change, reload, and you can still be looking at the previous version of the app
+with nothing to tell you it is stale. **If the app ever seems to be missing a
+feature you know landed, that is the first thing to suspect** — a hard reload
+(Ctrl/Cmd-Shift-R) clears it.
 
 ```sh
 npm test            # unit tests, no dependencies needed
@@ -261,6 +273,26 @@ mountain, which state a landmark is in) go in the matching `*-geography.js` or
 duplicate ids, pools too small to fill four choices, answers missing from their
 own pool, and traps that accidentally name the correct answer.
 
+## Adding a subject
+
+Nothing outside `src/data/` knows what geography is. The generator turns data
+rows into questions through templates; the session engine counts points; the
+modes render whatever a question carries. A times-tables or key-dates subject
+would be new data plus new templates, and no change to any of that machinery.
+
+The one piece that would need a decision is the setup screen. Today it has two
+levels — **curriculum** (Virginia, United States, World) and **topic** (State
+Capitals, Flags, …) — and `TOPICS` carries a `curriculum` field. Subjects want a
+third level above curriculum, so `Geography → United States → State Capitals`
+sits alongside `Maths → Times Tables → Sevens`. That is a field on `TOPICS`, a
+filter in `listQuestionRefs`, and one more row of chips; it is deliberately not
+built yet, because guessing at the shape of a subject that does not exist is how
+you get an abstraction that fits nothing.
+
+Two things already generalise for free: the tier system (warm-up / school level
+/ expert) is subject-agnostic, and so is every question's `card` and `clue`, so
+flash cards and a Jeopardy board would work on math the day they exist.
+
 ## Adding a game mode
 
 A mode is a function that takes a session and renders it:
@@ -288,3 +320,5 @@ mode reads `question.card`; a Jeopardy board reads `question.clue` and groups by
   map wired up as an answer surface the way the Virginia map is.
 - **Progress that survives a reload** — which questions a given kid keeps
   missing, across sessions rather than within one round.
+- **A second subject** — math or history, which is what the name leaves room
+  for. See *Adding a subject* above.
