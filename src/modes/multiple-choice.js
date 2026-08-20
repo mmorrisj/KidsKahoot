@@ -13,7 +13,7 @@
  */
 import { h, render } from '../ui/dom.js';
 import { regionLegend, renderMap } from '../ui/map.js';
-import { renderUsHighlight } from '../ui/us-map.js';
+import { renderUsHighlight, renderUsTapMap } from '../ui/us-map.js';
 import { flagNode, withFlags } from '../ui/flag.js';
 import { renderWorldLocator } from '../ui/world-locator.js';
 import {
@@ -89,7 +89,9 @@ function renderTiles(question, onPick) {
 /** Exported for live mode, which renders the same questions on remote devices. */
 export function renderAnswers(question, onPick) {
   if (!question.map) return renderTiles(question, onPick);
-  const map = renderMap(question, onPick);
+  const map = question.map.layer === 'us-states'
+    ? renderUsTapMap(question, onPick)
+    : renderMap(question, onPick);
   return {
     node: h('div.map-wrap', map.node),
     hint: 'Tap the map. Use Tab and Enter if you would rather use the keyboard.',

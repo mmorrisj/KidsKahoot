@@ -477,6 +477,12 @@ body {
   stroke-dasharray: 14 9;
 }
 
+/* As an answer surface it fills the dark map panel like the Virginia map,
+   and reuses the map__paint-- result marking, which fades the also-rans. */
+.usmap--tap { max-width: none; display: block; }
+.usmap--tap .usmap__state { transition: opacity 0.2s ease; }
+.usmap--tap .usmap__ring { stroke: #ffd54f; }
+
 /* ------------------------------------------------------------------- flags */
 
 /* Real images, not emoji — see src/ui/flag.js. The border keeps flags with

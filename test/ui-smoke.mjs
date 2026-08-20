@@ -28,12 +28,20 @@ async function shoot(page, name) {
  */
 async function tapMapTarget(page, label) {
   const point = await page.evaluate(async (wanted) => {
-    const { VA_MAP } = await import('/src/data/virginia-map.js');
-    const anchors = Object.fromEntries([
-      ...VA_MAP.regions.map((r) => [r.short, r.label]),
-      ...VA_MAP.neighbours.map((n) => [n.name, n.label]),
-    ]);
-    const svg = document.querySelector('.map');
+    const svg = document.querySelector('.map, .usmap--tap');
+    // Virginia's border states are also US states, with different anchors on
+    // each map — so pick the anchor set by which map is actually on screen.
+    let anchors;
+    if (svg.classList.contains('usmap--tap')) {
+      const { US_MAP } = await import('/src/data/us-map.js');
+      anchors = Object.fromEntries(US_MAP.states.map((s) => [s.name, s.label]));
+    } else {
+      const { VA_MAP } = await import('/src/data/virginia-map.js');
+      anchors = Object.fromEntries([
+        ...VA_MAP.regions.map((r) => [r.short, r.label]),
+        ...VA_MAP.neighbours.map((n) => [n.name, n.label]),
+      ]);
+    }
     const target = [...svg.querySelectorAll('.map__target')]
       .find((e) => e.getAttribute('aria-label') === wanted);
     if (!target) return null;
@@ -238,13 +246,15 @@ try {
   await page.reload();
   await page.waitForSelector('.screen--setup');
 
-  // Only the "Name the State" topic, so every question is a highlighted state.
+  // Only the "Name the State" topic, pinned to tiles so every question is a
+  // highlighted state (the topic also carries tap-the-map questions now).
   await page.click('.chip:has-text("Virginia")');
   await page.click('.chip:has-text("United States")');
   for (const topic of ['State Capitals', 'Regions of the US', 'State Abbreviations',
     'Rivers, Mountains & Lakes', 'Landmarks & Parks']) {
     await page.click(`.topic-group .chip:has-text("${topic}")`);
   }
+  await page.click('.chip:has-text("Answer buttons")');
   await page.click('.btn--xl:has-text("Start")');
 
   for (let i = 0; i < 3; i++) {
@@ -261,6 +271,42 @@ try {
     await page.click('.feedback .btn');
     if (await page.locator('.screen--results').count()) break;
   }
+
+  // ---- US map questions: tap the state itself -------------------------------
+  await phone.goto(BASE_URL);
+  await phone.evaluate(() => localStorage.clear());
+  await phone.reload();
+  await phone.waitForSelector('.screen--setup');
+  await phone.click('.chip:has-text("Virginia")'); // off
+  await phone.click('.chip:has-text("United States")'); // on
+  await phone.click('.chip:has-text("Map only")');
+  await phone.click('.btn--xl:has-text("Start")');
+
+  for (let i = 0; i < 4; i++) {
+    await phone.waitForSelector('.usmap--tap');
+    const targets = await phone.evaluate(() =>
+      [...document.querySelectorAll('.map__target')].map((e) => e.getAttribute('aria-label')));
+    assert.equal(targets.length, 50, 'all fifty states should be tappable');
+    assert.equal(new Set(targets).size, 50, 'duplicate state targets');
+
+    await tapMapTarget(phone, targets[0]);
+    await phone.waitForSelector('.feedback');
+    const marks = await phone.evaluate(() => ({
+      correct: document.querySelectorAll('.map__paint--correct').length,
+      wrong: document.querySelectorAll('.map__paint--wrong').length,
+      label: document.querySelector('.map__answer-label')?.textContent,
+    }));
+    assert.equal(marks.correct, 1, 'expected exactly one correct state');
+    assert.ok(marks.wrong <= 1, 'expected at most one wrong state');
+    assert.ok(marks.label, 'the answer state should be named on the map');
+    if (i === 0) await shoot(phone, '22-us-tap-feedback');
+    await phone.click('.feedback .btn');
+    if (await phone.locator('.screen--results').count()) break;
+  }
+
+  const usTapWidth = await phone.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  assert.ok(usTapWidth <= 1, `the US map makes the page scroll sideways by ${usTapWidth}px`);
 
   // ---- world questions show where the country is, after answering ---------
   await phone.goto(BASE_URL);

@@ -185,7 +185,7 @@ function showSetup() {
         h('div.chips', MAP_USES.map((m) =>
           chip(m.label, settings.mapUse === m.id,
             () => update({ mapUse: m.id }), m.blurb))),
-        h('p.hint', 'Map questions are answered by tapping Virginia itself.'),
+        h('p.hint', 'Map questions are answered by tapping the map itself — Virginia, or the whole US.'),
       ),
 
       h('section.panel',

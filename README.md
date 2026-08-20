@@ -10,13 +10,13 @@ quizzed on the capital of Uzbekistan:
 | Curriculum | Topics | Questions |
 | --- | --- | --- |
 | **Virginia** | the five regions, cities & historic places, rivers & borders | 175 |
-| **United States** | state capitals, name-the-state, regions, abbreviations, landforms, landmarks | 338 |
+| **United States** | state capitals, name-the-state, regions, abbreviations, landforms, landmarks | 438 |
 | **World** | capitals, flags, continents, physical geography | 739 |
 
 Virginia is the default, and each curriculum can be switched on independently.
 
-Virginia questions can be answered on **an actual map of Virginia** instead of
-four tiles — see below.
+Virginia questions can be answered on **an actual map of Virginia**, and US
+questions on **a map of the whole country**, instead of four tiles — see below.
 
 ## Running it
 
@@ -54,7 +54,7 @@ asked about in half a dozen ways:
 | flash card | France 🇫🇷 → Paris |
 | Jeopardy clue | *This city is the capital of France* → What is Paris? |
 
-Data rows currently yield **1,252 questions**. Hand-authoring that many is where
+Data rows currently yield **1,352 questions**. Hand-authoring that many is where
 a project like this dies, so nothing is hand-authored.
 
 Every generated question carries all of its forms at once — `prompt` + `choices`
@@ -183,15 +183,17 @@ every country pin against the continent the quiz claims for it.
 
 ## Answering on the map
 
-Virginia questions come in two surfaces, chosen with a setting on the setup
-screen: four coloured tiles, or the map. Map questions come in three kinds.
+Virginia and US questions come in two surfaces, chosen with a setting on the
+setup screen: four coloured tiles, or the map itself.
 
 | Kind | Example | What you tap |
 | --- | --- | --- |
-| Region | *Find the Valley and Ridge region and tap it* | one of the five regions |
-| Region of a place | *Which region is Roanoke in? Tap it on the map* | one of the five regions |
+| Region | *Find the Valley and Ridge region and tap it* | one of the five Virginia regions |
+| Region of a place | *Which region is Roanoke in? Tap it on the map* | one of the five Virginia regions |
 | Place | *Tap Richmond on the map* | one of four pins |
 | Border state | *Tap Tennessee on the map* | one of the five neighbouring states |
+| State | *Find Texas and tap it* | any of the fifty states |
+| State of a capital | *Tap the state whose capital is Austin* | any of the fifty states |
 
 Three things about how they behave are deliberate:
 
@@ -206,7 +208,9 @@ Three things about how they behave are deliberate:
   northern Virginia — about four pixels on a phone. Every region gets an
   invisible fat-stroked copy of itself as a tap target, stacked smallest last,
   so a tap near the Blue Ridge lands on the Blue Ridge rather than on the
-  Piedmont, which is five times its size and impossible to miss anyway.
+  Piedmont, which is five times its size and impossible to miss anyway. The US
+  map leans on the same trick for Rhode Island against its neighbours, and
+  circles a tiny answer state at the reveal so it can be seen at all.
 
 Pins get the same treatment in the generator: a "tap the place" question picks
 pins that are at least 90 map units apart, because two pins closer than their
@@ -350,10 +354,10 @@ New game modes (the content is already generated for them):
 
 More map:
 
-- **Tapping the US map** — the state shapes exist (`us-map.js`), but only as
-  question media; "tap Texas" and "tap the state north of Georgia" would need
-  the US map wired up as an answer surface the way the Virginia map is. The
-  world map could get the same treatment ("tap Brazil").
+- **Tapping the world map** — the US map is now an answer surface; the world
+  map could get the same treatment ("tap Brazil").
+- **Direction questions** — "tap the state north of Georgia" needs state
+  adjacency data the map does not carry yet; the tap surface is ready for it.
 - **Rivers on the map** — the four rivers feeding the Chesapeake are taught as
   lines, and tapping them needs river geometry the county data does not carry.
 
