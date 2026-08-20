@@ -32,10 +32,17 @@ html, body {
   min-height: 100%;
 }
 
+/* The gradient is fixed to the viewport, so html needs a solid colour behind it
+   for overscroll and for anything taller than one screen. */
+html { background-color: var(--bg-2); }
+
 body {
   font-family: var(--font);
   color: var(--on-dark);
-  background: linear-gradient(160deg, var(--bg) 0%, var(--bg-2) 100%) fixed;
+  min-height: 100vh;
+  background-color: var(--bg-2);
+  background-image: linear-gradient(160deg, var(--bg) 0%, var(--bg-2) 100%);
+  background-attachment: fixed;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -330,4 +337,16 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* Topic chips are grouped under the curriculum they belong to. */
+.topic-group { display: flex; flex-direction: column; gap: 8px; }
+.topic-group + .topic-group { margin-top: 4px; }
+
+.topic-group__title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--on-dark-soft);
 }

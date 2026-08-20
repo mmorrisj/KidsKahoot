@@ -1,13 +1,16 @@
 /**
- * Physical geography and landmarks.
+ * World physical geography and landmarks.
  *
  * These facts do not fit the "one row, many questions" country shape, so each
  * one is written out directly. `pool` names the list wrong answers are drawn
  * from, which keeps every choice in the same category as the right answer.
+ *
+ * US-specific rivers, mountains, and landmarks live in us-geography.js so the
+ * two curricula can be studied separately.
  */
 import { CONTINENTS } from './continents.js';
 
-export const POOLS = {
+export const WORLD_POOLS = {
   oceans: ['Pacific Ocean', 'Atlantic Ocean', 'Indian Ocean', 'Southern Ocean', 'Arctic Ocean'],
   rivers: ['Nile', 'Amazon', 'Yangtze', 'Mississippi', 'Danube', 'Ganges', 'Congo', 'Volga',
     'Rhine', 'Mekong', 'Colorado River', 'Rio Grande', 'Thames', 'Seine'],
@@ -26,7 +29,7 @@ export const POOLS = {
 const f = (id, category, pool, tier, prompt, answer, clue, note = null) =>
   ({ id, category, pool, tier, prompt, answer, clue, note });
 
-export const PHYSICAL_FACTS = [
+export const WORLD_FACTS = [
   // Oceans
   f('ocean-largest', 'Oceans', 'oceans', 1, 'Which is the largest ocean?', 'Pacific Ocean',
     'This is the largest ocean on Earth',
@@ -52,9 +55,6 @@ export const PHYSICAL_FACTS = [
     'This South American river carries more water than any other river on Earth'),
   f('river-yangtze', 'Rivers', 'rivers', 3, 'What is the longest river in Asia?', 'Yangtze',
     'This is the longest river in Asia, and it runs across China'),
-  f('river-mississippi', 'Rivers', 'rivers', 2,
-    'Which river runs down the middle of the United States?', 'Mississippi',
-    'This river runs down the middle of the United States into the Gulf of Mexico'),
   f('river-thames', 'Rivers', 'rivers', 2, 'Which river flows through London?', 'Thames',
     'This river flows through London'),
   f('river-seine', 'Rivers', 'rivers', 2, 'Which river flows through Paris?', 'Seine',
@@ -62,12 +62,6 @@ export const PHYSICAL_FACTS = [
   f('river-ganges', 'Rivers', 'rivers', 3,
     'Which river is considered sacred in India?', 'Ganges',
     'This river in India is sacred to millions of people'),
-  f('river-colorado', 'Rivers', 'rivers', 2,
-    'Which river carved the Grand Canyon?', 'Colorado River',
-    'This river carved the Grand Canyon'),
-  f('river-riogrande', 'Rivers', 'rivers', 3,
-    'Which river forms much of the border between the United States and Mexico?', 'Rio Grande',
-    'This river forms much of the border between the United States and Mexico'),
   f('river-volga', 'Rivers', 'rivers', 3, 'What is the longest river in Europe?', 'Volga',
     'This is the longest river in Europe'),
 
@@ -80,9 +74,6 @@ export const PHYSICAL_FACTS = [
     'What is the tallest mountain in Africa?', 'Mount Kilimanjaro',
     'This is the tallest mountain in Africa',
     'It is close to the equator but still has snow on top.'),
-  f('mtn-denali', 'Mountains', 'mountains', 3,
-    'What is the tallest mountain in North America?', 'Denali',
-    'This is the tallest mountain in North America'),
   f('mtn-aconcagua', 'Mountains', 'mountains', 3,
     'What is the tallest mountain in South America?', 'Aconcagua',
     'This is the tallest mountain in South America'),
@@ -97,9 +88,6 @@ export const PHYSICAL_FACTS = [
   f('range-andes', 'Mountain Ranges', 'ranges', 2,
     'What is the longest mountain range on land?', 'Andes',
     'This is the longest mountain range on land, running down South America'),
-  f('range-rockies', 'Mountain Ranges', 'ranges', 2,
-    'Which mountain range runs through Colorado and Montana?', 'Rocky Mountains',
-    'This mountain range runs up the western United States and into Canada'),
   f('range-alps', 'Mountain Ranges', 'ranges', 2,
     'Which mountain range runs through Switzerland, France, and Italy?', 'Alps',
     'This mountain range runs through Switzerland, France, and Italy'),
@@ -163,9 +151,6 @@ export const PHYSICAL_FACTS = [
   f('lm-machupicchu', 'Landmarks', 'countries', 2,
     'Machu Picchu is in which country?', 'Peru',
     'The Inca city of Machu Picchu sits in the mountains of this country'),
-  f('lm-liberty', 'Landmarks', 'countries', 1,
-    'The Statue of Liberty is in which country?', 'United States',
-    'The Statue of Liberty stands in this country'),
   f('lm-bigben', 'Landmarks', 'countries', 1,
     'Big Ben is in which country?', 'United Kingdom',
     'Big Ben chimes in this country'),

@@ -39,8 +39,22 @@ try {
   await page.click('text=+ Add player');
   await page.fill('.player-input >> nth=1', 'Sam');
   await page.click('.chip:has-text("20s")');
-  await page.click('.chip:has-text("US States")');
-  await page.click('.chip:has-text("Rivers, Mountains")');
+
+  // Virginia is the default curriculum, so only its topics are offered.
+  assert.deepEqual(
+    await page.locator('.topic-group__title').allTextContents(), ['Virginia'],
+    'a fresh setup should show Virginia topics only',
+  );
+  assert.equal(await page.locator('.topic-group .chip:has-text("The Five Regions")').count(), 1);
+  assert.equal(await page.locator('.topic-group .chip:has-text("Flags")').count(), 0,
+    'world topics should be hidden until the World curriculum is on');
+
+  // Turning on another curriculum reveals its topics.
+  await page.click('.chip:has-text("United States")');
+  assert.deepEqual(
+    await page.locator('.topic-group__title').allTextContents(),
+    ['Virginia', 'United States'],
+  );
   await shoot(page, '2-setup-filled');
 
   await page.click('.btn--xl:has-text("Start")');
@@ -87,6 +101,13 @@ try {
   await phone.evaluate(() => localStorage.clear());
   await phone.reload();
   await phone.waitForSelector('.screen--setup');
+  const before = await phone.locator('.availability').first().textContent();
+  await phone.click('.chip:has-text("Virginia")');
+  assert.match(await phone.locator('.availability').first().textContent(),
+    /at least one topic/, 'turning the last curriculum off should leave nothing selected');
+  await phone.click('.chip:has-text("Virginia")');
+  assert.equal(await phone.locator('.availability').first().textContent(), before,
+    'turning a curriculum back on should restore its topics');
   await shoot(phone, '7-mobile-setup');
 
   await phone.click('.btn--xl:has-text("Start")');

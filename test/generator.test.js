@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import { createRng } from '../src/lib/rng.js';
 import {
   CHOICE_COUNT,
+  CURRICULA,
+  TOPICS,
   countAvailable,
   generateQuestions,
   listQuestionRefs,
+  topicsIn,
 } from '../src/lib/generator.js';
 
 const round = (opts = {}) => generateQuestions({ rng: createRng(7), count: 40, ...opts });
@@ -45,9 +48,68 @@ test('tier filtering keeps hard questions out of a warm-up round', () => {
 });
 
 test('topic filtering only draws from the chosen topics', () => {
-  for (const q of round({ topics: ['us-states'] })) {
-    assert.equal(q.topic, 'us-states');
+  for (const q of round({ topics: ['us-capitals'] })) {
+    assert.equal(q.topic, 'us-capitals');
   }
+});
+
+test('a Virginia round never asks about the rest of the world', () => {
+  const topics = topicsIn('virginia').map((t) => t.id);
+  for (const q of round({ topics })) {
+    assert.equal(q.curriculum, 'virginia', `${q.id} leaked into a Virginia round`);
+  }
+});
+
+test('every curriculum has enough questions to fill a round on its own', () => {
+  for (const c of CURRICULA) {
+    const topics = topicsIn(c.id).map((t) => t.id);
+    assert.ok(topics.length > 0, `${c.id} has no topics`);
+    assert.ok(countAvailable({ topics }) >= 20,
+      `${c.label} only has ${countAvailable({ topics })} questions`);
+  }
+});
+
+test('every topic belongs to a real curriculum and can produce questions', () => {
+  const known = new Set(CURRICULA.map((c) => c.id));
+  for (const t of TOPICS) {
+    assert.ok(known.has(t.curriculum), `${t.id} points at unknown curriculum ${t.curriculum}`);
+    assert.ok(countAvailable({ topics: [t.id] }) >= 5,
+      `topic ${t.id} only has ${countAvailable({ topics: [t.id] })} questions`);
+  }
+});
+
+test('the Fall Line cities are never asked which region they are in', () => {
+  // Classroom materials disagree about whether Richmond is Coastal Plain or
+  // Piedmont, so the game does not pick a side.
+  const asked = listQuestionRefs({ topics: ['va-regions'] })
+    .filter((r) => r.template.id === 'va-region-of-place')
+    .map((r) => r.entity.name);
+  for (const city of ['Richmond', 'Fredericksburg', 'Alexandria', 'Petersburg']) {
+    assert.ok(!asked.includes(city), `${city} is on the Fall Line and should not be asked`);
+  }
+});
+
+test('state abbreviations compete with same-letter abbreviations', () => {
+  // MI/MN/MO/MS/MT is exactly the set kids confuse, so those are the distractors.
+  const refs = listQuestionRefs({ topics: ['us-abbreviations'] });
+  const minnesota = refs.find(
+    (r) => r.template.id === 'abbreviation-of-state' && r.entity.name === 'Minnesota',
+  );
+  const q = minnesota.template.make(createRng(8), minnesota.entity);
+  assert.ok(q.choices.includes('MN'));
+  assert.ok(q.choices.every((c) => c.startsWith('M')), `got ${q.choices.join(', ')}`);
+});
+
+test('Virginia and Vatican City do not collide despite sharing the code VA', () => {
+  // Both entities key on "VA"; the dataset namespace is what keeps them apart.
+  const questions = generateQuestions({
+    rng: createRng(21),
+    topics: ['us-abbreviations', 'world-capitals'],
+    count: 400,
+  });
+  const virginia = questions.filter((q) => q.id.endsWith(':VA'));
+  assert.ok(virginia.length >= 2, 'expected both the state and the country to appear');
+  assert.equal(new Set(virginia.map((q) => q.id)).size, virginia.length);
 });
 
 test('a round does not ask about the same place twice', () => {
@@ -84,14 +146,14 @@ test('wrong answers stay in the same category as the right one', () => {
 });
 
 test('the question bank is large enough to be worth playing', () => {
-  assert.ok(countAvailable() > 700, `only ${countAvailable()} questions available`);
+  assert.ok(countAvailable() > 1000, `only ${countAvailable()} questions available`);
   for (const tier of [1, 2, 3]) {
     assert.ok(countAvailable({ tiers: [tier] }) > 40, `tier ${tier} is too thin`);
   }
 });
 
 test('asking for more questions than exist returns everything, not duplicates', () => {
-  const all = generateQuestions({ rng: createRng(5), topics: ['physical'], count: 9999 });
+  const all = generateQuestions({ rng: createRng(5), topics: ['world-physical'], count: 9999 });
   assert.equal(new Set(all.map((q) => q.id)).size, all.length);
-  assert.equal(all.length, countAvailable({ topics: ['physical'] }));
+  assert.equal(all.length, countAvailable({ topics: ['world-physical'] }));
 });

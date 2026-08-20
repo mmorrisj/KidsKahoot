@@ -7,12 +7,21 @@
  */
 import { h, render } from './ui/dom.js';
 import { createRng, randomSeed } from './lib/rng.js';
-import { TIERS, TOPICS, countAvailable, generateQuestions } from './lib/generator.js';
+import {
+  CURRICULA,
+  TIERS,
+  countAvailable,
+  generateQuestions,
+  topicsIn,
+} from './lib/generator.js';
 import { createSession, missedQuestions, standings } from './lib/session.js';
 import { runMultipleChoice } from './modes/multiple-choice.js';
 
 const app = document.getElementById('app');
 const STORE_KEY = 'geography-quest.settings';
+// Bump when the shape of a saved setting changes, so old saves are discarded
+// rather than silently selecting topics that no longer exist.
+const SETTINGS_VERSION = 2;
 const MAX_PLAYERS = 6;
 const ROUND_LENGTHS = [10, 15, 20];
 const TIMER_OPTIONS = [
@@ -23,8 +32,11 @@ const TIMER_OPTIONS = [
 ];
 
 const defaultSettings = () => ({
+  version: SETTINGS_VERSION,
   players: ['Player 1'],
-  topics: ['world-capitals', 'flags', 'continents'],
+  // Virginia and US geography come first; the world is there when they want it.
+  curricula: ['virginia'],
+  topics: topicsIn('virginia').map((t) => t.id),
   tiers: [1, 2],
   count: 10,
   timerSeconds: null,
@@ -33,7 +45,8 @@ const defaultSettings = () => ({
 function loadSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY));
-    return saved ? { ...defaultSettings(), ...saved } : defaultSettings();
+    if (!saved || saved.version !== SETTINGS_VERSION) return defaultSettings();
+    return { ...defaultSettings(), ...saved };
   } catch {
     return defaultSettings();
   }
@@ -53,6 +66,21 @@ let settings = loadSettings();
 
 function toggle(list, value) {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}
+
+/**
+ * Turning a curriculum on selects all of its topics; turning it off drops them.
+ * Anything else would leave topics selected that the topic list no longer shows.
+ */
+function toggleCurriculum(id) {
+  const ids = topicsIn(id).map((t) => t.id);
+  const on = !settings.curricula.includes(id);
+  return {
+    curricula: toggle(settings.curricula, id),
+    topics: on
+      ? [...settings.topics, ...ids.filter((t) => !settings.topics.includes(t))]
+      : settings.topics.filter((t) => !ids.includes(t)),
+  };
 }
 
 /** Blank name boxes fall back to "Player 1", "Player 2", and so on. */
@@ -118,10 +146,21 @@ function showSetup() {
       ),
 
       h('section.panel',
+        h('h2.panel__title', 'Which subject?'),
+        h('div.chips', CURRICULA.map((c) =>
+          chip(`${c.icon} ${c.label}`, settings.curricula.includes(c.id),
+            () => update(toggleCurriculum(c.id)), c.blurb))),
+      ),
+
+      settings.curricula.length > 0 && h('section.panel',
         h('h2.panel__title', 'What should we ask about?'),
-        h('div.chips', TOPICS.map((t) =>
-          chip(`${t.icon} ${t.label}`, settings.topics.includes(t.id),
-            () => update({ topics: toggle(settings.topics, t.id) })))),
+        CURRICULA.filter((c) => settings.curricula.includes(c.id)).map((c) =>
+          h('div.topic-group',
+            h('h3.topic-group__title', c.label),
+            h('div.chips', topicsIn(c.id).map((t) =>
+              chip(`${t.icon} ${t.label}`, settings.topics.includes(t.id),
+                () => update({ topics: toggle(settings.topics, t.id) })))),
+          )),
       ),
 
       h('section.panel',

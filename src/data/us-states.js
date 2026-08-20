@@ -88,3 +88,9 @@ export const US_STATES = [
   s('Hawaii', 'Honolulu', 'HI', 'West', 2, [],
     'Hawaii is the only state made entirely of islands.'),
 ];
+
+// Grouping abbreviations by first letter puts the confusable ones together:
+// MI, MN, MO, MS, and MT are exactly the set kids mix up.
+for (const state of US_STATES) {
+  state.firstLetter = state.name[0];
+}

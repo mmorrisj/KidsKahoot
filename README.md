@@ -4,6 +4,17 @@ A Kahoot-style geography game for kids, aimed at roughly ages 8–12. Everyone
 plays on one device and passes it around. No accounts, no server, no build step
 — open it and play.
 
+Content is split into three curricula so a kid studying Virginia Studies is not
+quizzed on the capital of Uzbekistan:
+
+| Curriculum | Topics | Questions |
+| --- | --- | --- |
+| **Virginia** | the five regions, cities & historic places, rivers & borders | 86 |
+| **United States** | state capitals, regions, abbreviations, landforms, landmarks | 288 |
+| **World** | capitals, flags, continents, physical geography | 739 |
+
+Virginia is the default, and each curriculum can be switched on independently.
+
 ## Running it
 
 ```sh
@@ -34,8 +45,8 @@ asked about in half a dozen ways:
 | flash card | France 🇫🇷 → Paris |
 | Jeopardy clue | *This city is the capital of France* → What is Paris? |
 
-240 rows of data currently yield **845 questions**. Hand-authoring that many is
-where a project like this dies, so nothing is hand-authored.
+Data rows currently yield **1,113 questions**. Hand-authoring that many is where
+a project like this dies, so nothing is hand-authored.
 
 Every generated question carries all of its forms at once — `prompt` + `choices`
 for multiple choice, `card` for flash cards, `clue` for Jeopardy. A new game mode
@@ -45,9 +56,10 @@ renders a different field of the same object; it does not need new content.
 
 A distractor only teaches something if a kid could believe it. Two rules:
 
-- **Stay in the neighborhood.** Wrong capitals come from the same continent, and
-  wrong state capitals from the same region. Capitals never compete with country
-  names.
+- **Stay in the neighborhood.** Wrong capitals come from the same continent,
+  wrong state capitals from the same US region, and wrong Virginia places from
+  the same Virginia region. Postal abbreviations compete with same-letter
+  abbreviations, because MI/MN/MO/MS/MT is exactly the set kids confuse.
 - **Prefer the famous mistake.** Each row lists the cities kids actually guess —
   Sydney for Australia, Istanbul for Turkey, Lagos for Nigeria, Chicago for
   Illinois. The generator offers those first, and the explanation calls out why
@@ -72,9 +84,11 @@ src/
   app.js               setup and results screens, routing
   styles.css
   data/
+    virginia.js        five regions, 39 places, rivers, borders, Fall Line
+    us-states.js       all 50 states: capital, region, abbreviation, traps
+    us-geography.js    US rivers, mountains, Great Lakes, landmarks, parks
     countries.js       140 countries: capital, continent, flag, tier, traps
-    us-states.js       all 50 states and capitals, by region
-    physical.js        rivers, mountains, deserts, oceans, landmarks
+    world-geography.js world rivers, mountains, deserts, oceans, landmarks
     continents.js
   lib/
     generator.js       templates that turn data rows into questions
@@ -90,15 +104,28 @@ test/
   ui-smoke.mjs         plays a full two-player round in a real browser
 ```
 
+## A note on Virginia content
+
+The five regions, the Fall Line, the four rivers feeding the Chesapeake Bay, and
+the bordering states follow what Virginia Studies covers.
+
+One deliberate omission: **Richmond, Fredericksburg, Alexandria, and Petersburg
+are never asked "which region are you in".** All four grew up *on* the Fall Line,
+and classroom materials disagree about which region to put them in, so the game
+does not pick a side — the Fall Line gets its own questions instead. Those four
+rows carry a `fallLine` flag, and a test asserts the region question skips them.
+
 ## Adding content
 
 Add a row to `src/data/countries.js` and every template picks it up
-automatically — no other file changes. Same for `us-states.js`. One-off facts
-that do not fit the country shape (longest river, tallest mountain) go in
-`physical.js` with a `pool` that wrong answers are drawn from.
+automatically — no other file changes. Same for `us-states.js` and the Virginia
+places. One-off facts that do not fit a relational shape (longest river, tallest
+mountain, which state a landmark is in) go in the matching `*-geography.js` or
+`virginia.js` fact list, with a `pool` that wrong answers are drawn from.
 
-`npm test` checks new rows for missing fields, bad continents, duplicate codes,
-and traps that accidentally name the correct answer.
+`npm test` checks new rows for missing fields, bad continents or regions,
+duplicate ids, pools too small to fill four choices, answers missing from their
+own pool, and traps that accidentally name the correct answer.
 
 ## Adding a game mode
 
@@ -120,7 +147,9 @@ mode reads `question.card`; a Jeopardy board reads `question.clue` and groups by
   `question.clue` and `question.tier` mapping onto the tile values. This is the
   best mode for mixed ages: put tier-1 questions in the cheap row and tier-3 in
   the expensive one, and a 7-year-old and an 11-year-old can share a board.
-- **Map mode** — click the country on an outline map. Needs SVG map data, which
-  is the one thing here that cannot be generated from a text row.
+- **Map mode** — click the region on an outline map. This is the mode Virginia
+  Studies would benefit from most, since the five regions are taught as shapes
+  on a map. Needs SVG map data, which is the one thing here that cannot be
+  generated from a text row.
 - **Progress that survives a reload** — which questions a given kid keeps
   missing, across sessions rather than within one round.
