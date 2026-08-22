@@ -18,9 +18,9 @@ const round = (opts = {}) => generateQuestions({ rng: createRng(7), count: 40, .
 test('every question is answerable: the answer is among unique choices', () => {
   for (const q of round()) {
     // Tile questions always offer exactly four. Map questions offer whichever
-    // shapes are on the map — all five regions, or all five border states — so
-    // they are allowed a wider range.
-    const expected = q.map ? [3, 6] : [CHOICE_COUNT, CHOICE_COUNT];
+    // shapes are on the map — five Virginia regions, five border states, or
+    // all fifty US states — so they are allowed a far wider range.
+    const expected = q.map ? [3, 50] : [CHOICE_COUNT, CHOICE_COUNT];
     assert.ok(q.choices.length >= expected[0] && q.choices.length <= expected[1],
       `${q.id} has ${q.choices.length} choices`);
     assert.equal(new Set(q.choices).size, q.choices.length, `${q.id} has a duplicate choice`);
@@ -97,7 +97,10 @@ test('the Fall Line cities are never asked which region they are in', () => {
 });
 
 test('a highlighted-state question lights up the state it asks about', () => {
-  for (const ref of listQuestionRefs({ topics: ['us-state-shapes'] })) {
+  // The topic also carries the tap-the-map version; this checks the tile one.
+  const refs = listQuestionRefs({ topics: ['us-state-shapes'], mapUse: 'text' });
+  assert.ok(refs.length === 50, 'expected one highlight question per state');
+  for (const ref of refs) {
     assert.equal(ref.template.id, 'us-state-shape');
     const q = ref.template.make(createRng(4), ref.entity);
     assert.deepEqual(q.media, { kind: 'us-map', value: ref.entity.name },
@@ -206,6 +209,21 @@ test('a map question offers every shape on its layer as a choice', () => {
       assert.deepEqual(q.map.pins.map((p) => p.name).sort(), [...q.choices].sort());
     }
   }
+});
+
+test('US map questions put all fifty states on the map', () => {
+  const questions = round({ topics: topicsIn('united-states').map((t) => t.id), mapUse: 'map' });
+  assert.ok(questions.length > 10, 'expected plenty of US map questions');
+  for (const q of questions) {
+    assert.equal(q.map.layer, 'us-states', `${q.id}: bad layer`);
+    assert.equal(q.choices.length, 50, `${q.id}: every state should be tappable`);
+    assert.ok(q.choices.includes(q.answer));
+    assert.ok(!q.media, `${q.id}: a tap question needs no media map`);
+  }
+  // Both directions exist: find-the-state and find-the-capital's-state.
+  const templates = new Set(questions.map((q) => q.template));
+  assert.ok(templates.has('us-map-state-by-name'), 'missing the find-the-state question');
+  assert.ok(templates.has('us-map-state-of-capital'), 'missing the capital-on-the-map question');
 });
 
 test('asking for map questions outside Virginia yields nothing rather than junk', () => {

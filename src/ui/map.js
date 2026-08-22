@@ -27,7 +27,7 @@ const PIN_HIT_RADIUS = 34;
  */
 const HIT_STROKE = 22;
 
-function svg(tag, attrs = {}) {
+export function svg(tag, attrs = {}) {
   const node = document.createElementNS(SVG_NS, tag);
   for (const [key, value] of Object.entries(attrs)) {
     if (value == null || value === false) continue;
@@ -37,7 +37,7 @@ function svg(tag, attrs = {}) {
 }
 
 /** Wire up press and keyboard handling on a shape or pin. */
-function makeTappable(node, { label, onPick }) {
+export function makeTappable(node, { label, onPick }) {
   node.setAttribute('role', 'button');
   node.setAttribute('tabindex', '0');
   node.setAttribute('aria-label', label);
@@ -56,12 +56,13 @@ function makeTappable(node, { label, onPick }) {
  * Invisible fat-stroked copies of the shapes, stacked smallest last so the
  * smallest target wins any pixel two shapes both claim. Without this, tapping
  * near the Blue Ridge would land on the Piedmont or the Valley and Ridge, which
- * are hundreds of times larger and impossible to miss on their own.
+ * are hundreds of times larger and impossible to miss on their own. The US map
+ * leans on the same trick for Rhode Island against its neighbours.
  */
-function hitLayer(shapes, onPick) {
+export function hitLayer(shapes, onPick, stroke = HIT_STROKE) {
   const group = svg('g', { class: 'map__hits' });
   for (const shape of [...shapes].sort((a, b) => b.area - a.area)) {
-    const path = svg('path', { d: shape.d, class: 'map__hit', 'stroke-width': HIT_STROKE });
+    const path = svg('path', { d: shape.d, class: 'map__hit', 'stroke-width': stroke });
     group.append(makeTappable(path, { label: shape.label, onPick }));
   }
   return group;

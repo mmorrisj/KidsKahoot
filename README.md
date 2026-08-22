@@ -1,8 +1,8 @@
 # Kids Quiz Quest
 
-A Kahoot-style quiz game for kids, aimed at roughly ages 8–12. Everyone plays on
-one device and passes it around. No accounts, no server, no build step — open it
-and play.
+A Kahoot-style quiz game for kids, aimed at roughly ages 8–12. Play on one
+device and pass it around, or host a live game that everyone joins from their
+own phone or tablet. No accounts, no build step.
 
 Content is organised as **subject → curriculum → topic**, so a kid studying
 Virginia Studies is not quizzed on the capital of Uzbekistan, and a times-tables
@@ -19,29 +19,34 @@ round is not interrupted by flags:
 Roughly 6,900 questions in total. Virginia is the default, and every level can
 be switched on independently.
 
-Virginia questions can be answered on **an actual map of Virginia** instead of
-four tiles — see below.
+Virginia questions can be answered on **an actual map of Virginia**, and US
+questions on **a map of the whole country**, instead of four tiles — see below.
 
 ## Running it
 
 ```sh
-npm start           # http://localhost:8080, no dependencies needed
+npm install
+npm start           # the game server, at http://localhost:8080
 ```
 
-ES modules do not load over `file://`, so the page has to be served rather than
-double-clicked. It deploys to GitHub Pages as-is.
+Other devices on the same network reach it at `http://<your-ip>:8080`. The
+node server (Node 22.5+) does three jobs: static files, the WebSocket hub for
+live games, and the all-time leaderboard.
 
-`npm start` runs `scripts/serve.mjs`, a twenty-line static server whose only
-distinguishing feature is that it sends `Cache-Control: no-store`. Browsers
-cache ES modules aggressively, and a plain static server lets them: pull a
-change, reload, and you can still be looking at the previous version of the app
-with nothing to tell you it is stale. **If the app ever seems to be missing a
-feature you know landed, that is the first thing to suspect** — a hard reload
-(Ctrl/Cmd-Shift-R) clears it.
+Solo pass-the-device play needs none of that — any static file server works
+(ES modules do not load over `file://`), and it deploys to GitHub Pages as-is;
+only hosting live games and the leaderboard require the real server.
+
+`server.mjs` serves everything `Cache-Control: no-store`. Browsers cache ES
+modules aggressively, and without that header you can pull a change, reload, and
+still be looking at the previous version of the app with nothing to say it is
+stale. **If a feature you know landed seems to be missing, suspect that first**
+— a hard reload (Ctrl/Cmd-Shift-R) clears it. Static hosts will not set it, so
+the same caution applies on GitHub Pages.
 
 ```sh
-npm test            # unit tests, no dependencies needed
-npm run test:ui     # browser smoke test, needs `npm install` and a running server
+npm test            # unit tests, no browser needed
+npm run test:ui     # browser smoke test, needs `npm install` and `npm start` running
 ```
 
 ## The idea
@@ -60,7 +65,7 @@ asked about in half a dozen ways:
 | flash card | France 🇫🇷 → Paris |
 | Jeopardy clue | *This city is the capital of France* → What is Paris? |
 
-Data rows currently yield **1,202 questions**. Hand-authoring that many is where
+Data rows currently yield **1,352 questions**. Hand-authoring that many is where
 a project like this dies, so nothing is hand-authored.
 
 Every generated question carries all of its forms at once — `prompt` + `choices`
@@ -95,6 +100,10 @@ A distractor only teaches something if a kid could believe it. Two rules:
 
 ```
 index.html
+server.mjs             static files + WebSocket hub + leaderboard API
+server/
+  live.js              rooms, joining, and the live question loop (transport-free)
+  stats.js             all-time player tracking, SQLite via node:sqlite
 src/
   app.js               setup and results screens, routing
   styles.css
@@ -113,19 +122,25 @@ src/
     generator.js       templates that turn data rows into questions
     session.js         queue, turn order, scoring, re-queueing (no DOM)
     rng.js             seeded RNG, so a round can be replayed exactly
+    net.js             WebSocket client for live games
   modes/
     multiple-choice.js the Kahoot-shaped mode, tiles or map
+    live.js            host and join flows for games across devices
   ui/
     dom.js
     map.js             the Virginia map as an answer surface
     number-pad.js      typing a numeric answer, for math
     us-map.js          the US map as question media (one state highlighted)
+    flag.js            flags as images — emoji flags don't render everywhere
     world-locator.js   the world map shown in the feedback panel
+  assets/
+    flags/             one SVG per country (fetched once, committed)
 scripts/
   lib/geo.mjs              shared dissolve / project / simplify helpers
   build-virginia-map.mjs   generates the Virginia region map (run by hand)
   build-us-map.mjs         generates the US state-shapes map (run by hand)
   build-world-map.mjs      generates the world map (run by hand)
+  fetch-flags.mjs          downloads flag SVGs for countries.js (run by hand)
   map-preview.html         eyeball the Virginia map while tuning boundaries
   world-preview.html       eyeball the world map and every country pin
 test/
@@ -136,7 +151,8 @@ test/
   us-map.test.js       the generated US map covers exactly the fifty states
   world-map.test.js    every country has a pin, and Oceania is not split in two
   math.test.js         answers re-derived independently, slips offered and named
-  ui-smoke.mjs         plays a full two-player round in a real browser
+  live.test.js         whole live games against the hub, plus the leaderboard
+  ui-smoke.mjs         full rounds in a real browser, incl. a three-device live game
 ```
 
 ## A note on Virginia content
@@ -233,15 +249,17 @@ evens out world rounds too, which used to be mostly flags and capitals.
 
 ## Answering on the map
 
-Virginia questions come in two surfaces, chosen with a setting on the setup
-screen: four coloured tiles, or the map. Map questions come in three kinds.
+Virginia and US questions come in two surfaces, chosen with a setting on the
+setup screen: four coloured tiles, or the map itself.
 
 | Kind | Example | What you tap |
 | --- | --- | --- |
-| Region | *Find the Valley and Ridge region and tap it* | one of the five regions |
-| Region of a place | *Which region is Roanoke in? Tap it on the map* | one of the five regions |
+| Region | *Find the Valley and Ridge region and tap it* | one of the five Virginia regions |
+| Region of a place | *Which region is Roanoke in? Tap it on the map* | one of the five Virginia regions |
 | Place | *Tap Richmond on the map* | one of four pins |
 | Border state | *Tap Tennessee on the map* | one of the five neighbouring states |
+| State | *Find Texas and tap it* | any of the fifty states |
+| State of a capital | *Tap the state whose capital is Austin* | any of the fifty states |
 
 Three things about how they behave are deliberate:
 
@@ -256,7 +274,9 @@ Three things about how they behave are deliberate:
   northern Virginia — about four pixels on a phone. Every region gets an
   invisible fat-stroked copy of itself as a tap target, stacked smallest last,
   so a tap near the Blue Ridge lands on the Blue Ridge rather than on the
-  Piedmont, which is five times its size and impossible to miss anyway.
+  Piedmont, which is five times its size and impossible to miss anyway. The US
+  map leans on the same trick for Rhode Island against its neighbours, and
+  circles a tiny answer state at the reveal so it can be seen at all.
 
 Pins get the same treatment in the generator: a "tap the place" question picks
 pins that are at least 90 map units apart, because two pins closer than their
@@ -298,6 +318,52 @@ the map and the answers cannot drift apart. That check caught two real errors �
 a plateau boundary drawn northwest of Wise and Norton, and a Blue Ridge boundary
 that put Mount Rogers in the valley.
 
+## Playing across devices
+
+One device hosts, the others join — the Kahoot shape:
+
+- **Hosting.** Build the round on the setup screen as usual, then press **Host
+  for other devices** instead of Start. The lobby shows who has joined; the
+  host paces the whole game and does not play.
+- **Joining.** Every open lobby on the network shows up under **Join a game** —
+  pick a name, tap a game. Up to 12 players.
+- **Playing.** Everyone answers every question at the same time on their own
+  device, tiles and map questions alike. The reveal waits for the last answer
+  (or the timer), shows each player what everyone did, and stays up until the
+  host presses Next — a parent reading the explanation aloud is the point of
+  playing together.
+
+The server is the referee. It generates the questions, keeps the answers to
+itself until the reveal (`server/live.js` strips them from the wire), enforces
+the deadline, and scores with the same rules as pass-the-device play: speed
+only ever *adds* points, so the slowest reader still scores for being right.
+There are no retries in a live round — everyone faces each question exactly
+once — so the requeue mechanic stays in pass-the-device mode.
+
+The hub is transport-free (connections are anything with a `send()`, time is
+injected), so `test/live.test.js` plays entire games — scoring, streaks,
+disconnects, forced reveals, deadline timeouts — with plain arrays and a
+hand-cranked clock. The browser smoke test then plays a real three-device game
+over actual WebSockets.
+
+Dropped connections are handled the way a living room needs: a player who
+vanishes mid-game keeps their score on the board and stops being waited for;
+if the host vanishes, the game ends and everyone is told.
+
+## Players and scores over time
+
+Every finished live game is recorded — SQLite via `node:sqlite`, built into
+Node, no dependency — as one `games` row plus a `results` row per player, in
+`data/kids-quiz-quest.db` (gitignored). Keeping per-game history rather than
+running totals means future features ("which questions does Maya keep
+missing?") are new queries, not a storage rewrite.
+
+Players are keyed by lowercased name: this is a family game on a home network,
+so "the same kid types the same name" is the identity model. The 🏆
+**Leaderboard** on the home screen (and the end of every live game) shows the
+all-time table — games, wins, points, right answers. Solo games count for
+points but not wins; beating nobody is not a win.
+
 ## The US state-shapes map
 
 The **Name the State** topic shows the whole country with one state lit up and
@@ -319,8 +385,9 @@ fifty rows in `us-states.js`.
 ## Adding content
 
 Add a row to `src/data/countries.js` and every template picks it up
-automatically — no other file changes. Same for `us-states.js` and the Virginia
-places. One-off facts that do not fit a relational shape (longest river, tallest
+automatically; run `node scripts/fetch-flags.mjs` once to pull the new
+country's flag image (a test fails until you do). Same for `us-states.js` and
+the Virginia places, with no extra step. One-off facts that do not fit a relational shape (longest river, tallest
 mountain, which state a landmark is in) go in the matching `*-geography.js` or
 `virginia.js` fact list, with a `pool` that wrong answers are drawn from.
 
@@ -365,19 +432,44 @@ mode reads `question.card`; a Jeopardy board reads `question.clue` and groups by
 
 ## Not built yet
 
-- **Flash-card mode** — `question.card` is already generated for every question.
+New game modes (the content is already generated for them):
+
+- **Flash-card mode** — `question.card` is already on every question.
 - **Reverse Jeopardy board** — a 5×6 grid of categories × point values, with
   `question.clue` and `question.tier` mapping onto the tile values. This is the
   best mode for mixed ages: put tier-1 questions in the cheap row and tier-3 in
   the expensive one, and a 7-year-old and an 11-year-old can share a board.
+
+More map:
+
+- **Tapping the world map** — the US map is now an answer surface; the world
+  map could get the same treatment ("tap Brazil").
+- **Direction questions** — "tap the state north of Georgia" needs state
+  adjacency data the map does not carry yet; the tap surface is ready for it.
 - **Rivers on the map** — the four rivers feeding the Chesapeake are taught as
   lines, and tapping them needs river geometry the county data does not carry.
-- **Tapping the US map** — the state shapes now exist (`us-map.js`), but only as
-  media; "tap Virginia" and "tap the state north of Georgia" would need the US
-  map wired up as an answer surface the way the Virginia map is.
-- **Progress that survives a reload** — which questions a given kid keeps
-  missing, across sessions rather than within one round.
 - **History** — the third subject the name leaves room for. See *Adding a
   subject* above.
 - **Fractions and decimals** — where grade 4–5 math actually gets hard. Needs
   more template variety than the fact sets, and the mistakes are subtler.
+
+
+Live games (the shape is there; these are the rough edges):
+
+- **Rejoining mid-game** — a player who reloads or drops keeps their score on
+  the board but cannot get back in; rejoining by name should reclaim the seat.
+- **Rematch** — the room is torn down when a game ends, so "play again with the
+  same players" means everyone re-joins a fresh lobby. One button should do it.
+- **A playing host** — the host only referees. On a two-kid evening the host
+  device should be able to deal itself in.
+- **Sounds** — half of what makes Kahoot feel like an event is the lobby music
+  and the answer stings.
+
+Tracking (the SQLite schema was chosen with these in mind):
+
+- **Per-question history** — the store keeps per-game totals, but not which
+  questions each player missed, so "practice what Maya keeps getting wrong"
+  is not yet a query anyone can run. Recording `results` per question is the
+  missing half.
+- **Pass-the-device games on the leaderboard** — only hosted live games are
+  recorded today; solo and shared-device rounds vanish when the tab closes.

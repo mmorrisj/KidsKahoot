@@ -236,6 +236,7 @@ const COUNTRY_BY_NAME = new Map(COUNTRIES.map((c) => [c.name, c]));
 
 const ALL_REGION_NAMES = VA_REGIONS.map((r) => r.short);
 const ALL_BORDER_NAMES = VA_BORDERS.map((b) => b.name);
+const ALL_STATE_NAMES = US_STATES.map((s) => s.name);
 
 /**
  * How many pins a "tap the place" question shows. Fewer than the tile count,
@@ -600,6 +601,47 @@ const TEMPLATES = [
       explanation: `That is ${x.name}, in the ${x.region}.`,
       card: { front: `Find ${x.name} on a US map`, back: `It is in the ${x.region}`, hint: null },
       clue: { text: 'This state is highlighted on the map', response: `What is ${x.name}?` },
+    }),
+  },
+  // -------------------------------------------------- United States, on the map
+  {
+    id: 'us-map-state-by-name',
+    dataset: 'us-states',
+    topic: 'us-state-shapes',
+    usesMap: true,
+    entities: () => US_STATES,
+    tierOf: (x) => x.tier,
+    make: (rng, x) => ({
+      category: 'US States',
+      prompt: `Find ${x.name} and tap it.`,
+      media: null,
+      answer: x.name,
+      // Every state on the map is tappable, so all fifty are the choices.
+      choices: ALL_STATE_NAMES,
+      map: { layer: 'us-states' },
+      explanation: `${x.name} is in the ${x.region}.`,
+      card: { front: `Where is ${x.name}?`, back: `In the ${x.region}`, hint: null },
+      clue: { text: `${x.name} sits in this part of the country`, response: `What is the ${x.region}?` },
+    }),
+  },
+  {
+    id: 'us-map-state-of-capital',
+    dataset: 'us-states',
+    topic: 'us-capitals',
+    usesMap: true,
+    entities: () => US_STATES,
+    // Two hops — capital to state, state to map — is harder than either alone.
+    tierOf: (x) => Math.min(3, x.tier + 1),
+    make: (rng, x) => ({
+      category: 'State Capitals',
+      prompt: `Tap the state whose capital is ${x.capital}.`,
+      media: null,
+      answer: x.name,
+      choices: ALL_STATE_NAMES,
+      map: { layer: 'us-states' },
+      explanation: `${x.capital} is the capital of ${x.name}.`,
+      card: { front: `${x.capital} is the capital of…`, back: x.name, hint: null },
+      clue: { text: `${x.capital} is the capital of this state`, response: `What is ${x.name}?` },
     }),
   },
   {

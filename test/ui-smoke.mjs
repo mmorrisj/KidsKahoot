@@ -1,8 +1,9 @@
 /**
- * Browser smoke test: plays a full two-player round and asserts the app never
- * throws. Not part of `npm test` because it needs a browser — run it with
- * `npm run test:ui` (starts its own static server is NOT included: run
- * `npm start` in another terminal first, or set BASE_URL).
+ * Browser smoke test: plays full rounds — pass-the-device, map-only, and a
+ * live three-device game — and asserts the app never throws. Not part of
+ * `npm test` because it needs a browser: run `npm start` in another terminal
+ * (the live pass needs the real game server, not just static files, so set
+ * BASE_URL accordingly if you serve elsewhere), then `npm run test:ui`.
  *
  * Pass SHOTS=<dir> to also write screenshots of each screen.
  */
@@ -27,12 +28,20 @@ async function shoot(page, name) {
  */
 async function tapMapTarget(page, label) {
   const point = await page.evaluate(async (wanted) => {
-    const { VA_MAP } = await import('/src/data/virginia-map.js');
-    const anchors = Object.fromEntries([
-      ...VA_MAP.regions.map((r) => [r.short, r.label]),
-      ...VA_MAP.neighbours.map((n) => [n.name, n.label]),
-    ]);
-    const svg = document.querySelector('.map');
+    const svg = document.querySelector('.map, .usmap--tap');
+    // Virginia's border states are also US states, with different anchors on
+    // each map — so pick the anchor set by which map is actually on screen.
+    let anchors;
+    if (svg.classList.contains('usmap--tap')) {
+      const { US_MAP } = await import('/src/data/us-map.js');
+      anchors = Object.fromEntries(US_MAP.states.map((s) => [s.name, s.label]));
+    } else {
+      const { VA_MAP } = await import('/src/data/virginia-map.js');
+      anchors = Object.fromEntries([
+        ...VA_MAP.regions.map((r) => [r.short, r.label]),
+        ...VA_MAP.neighbours.map((n) => [n.name, n.label]),
+      ]);
+    }
     const target = [...svg.querySelectorAll('.map__target')]
       .find((e) => e.getAttribute('aria-label') === wanted);
     if (!target) return null;
@@ -237,13 +246,15 @@ try {
   await page.reload();
   await page.waitForSelector('.screen--setup');
 
-  // Only the "Name the State" topic, so every question is a highlighted state.
+  // Only the "Name the State" topic, pinned to tiles so every question is a
+  // highlighted state (the topic also carries tap-the-map questions now).
   await page.click('.chip:has-text("Virginia")');
   await page.click('.chip:has-text("United States")');
   for (const topic of ['State Capitals', 'Regions of the US', 'State Abbreviations',
     'Rivers, Mountains & Lakes', 'Landmarks & Parks']) {
     await page.click(`.topic-group .chip:has-text("${topic}")`);
   }
+  await page.click('.chip:has-text("Answer buttons")');
   await page.click('.btn--xl:has-text("Start")');
 
   for (let i = 0; i < 3; i++) {
@@ -260,6 +271,42 @@ try {
     await page.click('.feedback .btn');
     if (await page.locator('.screen--results').count()) break;
   }
+
+  // ---- US map questions: tap the state itself -------------------------------
+  await phone.goto(BASE_URL);
+  await phone.evaluate(() => localStorage.clear());
+  await phone.reload();
+  await phone.waitForSelector('.screen--setup');
+  await phone.click('.chip:has-text("Virginia")'); // off
+  await phone.click('.chip:has-text("United States")'); // on
+  await phone.click('.chip:has-text("Map only")');
+  await phone.click('.btn--xl:has-text("Start")');
+
+  for (let i = 0; i < 4; i++) {
+    await phone.waitForSelector('.usmap--tap');
+    const targets = await phone.evaluate(() =>
+      [...document.querySelectorAll('.map__target')].map((e) => e.getAttribute('aria-label')));
+    assert.equal(targets.length, 50, 'all fifty states should be tappable');
+    assert.equal(new Set(targets).size, 50, 'duplicate state targets');
+
+    await tapMapTarget(phone, targets[0]);
+    await phone.waitForSelector('.feedback');
+    const marks = await phone.evaluate(() => ({
+      correct: document.querySelectorAll('.map__paint--correct').length,
+      wrong: document.querySelectorAll('.map__paint--wrong').length,
+      label: document.querySelector('.map__answer-label')?.textContent,
+    }));
+    assert.equal(marks.correct, 1, 'expected exactly one correct state');
+    assert.ok(marks.wrong <= 1, 'expected at most one wrong state');
+    assert.ok(marks.label, 'the answer state should be named on the map');
+    if (i === 0) await shoot(phone, '22-us-tap-feedback');
+    await phone.click('.feedback .btn');
+    if (await phone.locator('.screen--results').count()) break;
+  }
+
+  const usTapWidth = await phone.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  assert.ok(usTapWidth <= 1, `the US map makes the page scroll sideways by ${usTapWidth}px`);
 
   // ---- world questions show where the country is, after answering ---------
   await phone.goto(BASE_URL);
@@ -297,6 +344,121 @@ try {
   const worldWidth = await phone.evaluate(() =>
     document.documentElement.scrollWidth - document.documentElement.clientWidth);
   assert.ok(worldWidth <= 1, `the locator makes the page scroll sideways by ${worldWidth}px`);
+
+  // ---- flag questions actually show flags -----------------------------------
+  // Flags are images, not emoji — emoji flags render as letter codes or empty
+  // boxes on many devices, which is no question at all.
+  await page.goto(BASE_URL);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.waitForSelector('.screen--setup');
+  await page.click('.chip:has-text("Virginia")');
+  await page.click('.chip:has-text("World")');
+  for (const topic of ['World Capitals', 'Continents', 'Rivers, Mountains & Landmarks']) {
+    await page.click(`.topic-group .chip:has-text("${topic}")`);
+  }
+  await page.click('.btn--xl:has-text("Start")');
+
+  for (let i = 0; i < 3; i++) {
+    await page.waitForSelector('.screen--question img.flag');
+    // A broken src never completes with a width, so this times out loudly.
+    await page.waitForFunction(() => [...document.querySelectorAll('img.flag')]
+      .every((img) => img.complete && img.naturalWidth > 0));
+    if (i === 0) await shoot(page, '19-flags');
+    await page.click('.tile >> nth=0');
+    await page.waitForSelector('.feedback');
+    await page.click('.feedback .btn');
+    if (await page.locator('.screen--results').count()) break;
+  }
+
+  // ---- a live game: one host, two players on their own devices -------------
+  // Needs the node server (npm start); a plain static server has no WebSocket.
+  const host = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+  watch(host, 'host');
+  await host.goto(BASE_URL);
+  await host.evaluate(() => localStorage.clear());
+  await host.reload();
+  await host.waitForSelector('.screen--setup');
+  await host.fill('.player-input >> nth=0', 'Dad');
+  await host.click('.btn:has-text("Host for other devices")');
+  await host.waitForSelector('.screen--lobby');
+  assert.ok((await host.textContent('.hero__title')).includes("Dad's game"));
+  assert.equal(await host.locator('.btn--xl[disabled]').count(), 1,
+    'starting with no players should be impossible');
+
+  const joiners = [];
+  for (const name of ['Maya', 'Sam']) {
+    const p = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true });
+    watch(p, `player-${name}`);
+    await p.goto(BASE_URL);
+    await p.evaluate(() => localStorage.clear());
+    await p.reload();
+    await p.click('.btn:has-text("Join a game")');
+    if (name === 'Maya') {
+      // Regression check: the 2s session poll used to redraw the whole screen,
+      // throwing focus out of the name box in the middle of typing.
+      await p.click('.player-input');
+      await p.keyboard.type(name.slice(0, 2));
+      await p.waitForTimeout(2400); // straddle at least one poll tick
+      assert.ok(await p.evaluate(() => document.activeElement.classList.contains('player-input')),
+        'the name box lost focus while the session list refreshed');
+      await p.keyboard.type(name.slice(2));
+      assert.equal(await p.inputValue('.player-input'), name);
+    } else {
+      await p.fill('.player-input', name);
+    }
+    await p.waitForSelector('.sessions__row');
+    assert.ok((await p.textContent('.sessions__name')).includes("Dad's game"),
+      'the hosted game should be listed for players');
+    await p.click('.sessions__row .btn');
+    await p.waitForSelector('.screen--lobby');
+    joiners.push(p);
+  }
+  const [maya, sam] = joiners;
+  await host.waitForSelector('.chip:has-text("Sam")');
+  await shoot(host, '14-live-lobby');
+
+  await host.click('.btn--xl:has-text("Start the game")');
+
+  for (let guard = 0; guard < 15; guard++) {
+    // A fresh question renders unlocked answers; the previous screen's stay locked.
+    for (const p of joiners) {
+      await p.waitForSelector('.live-answers:not(.live-answers--locked)');
+    }
+    if (guard === 0) await shoot(maya, '15-live-question');
+    await answerSomehow(maya);
+    await answerSomehow(sam);
+
+    await host.waitForSelector('.feedback');
+    assert.equal(await host.locator('.livewire__row').count(), 2,
+      'the host reveal should show one row per player');
+    if (guard === 0) await shoot(host, '16-live-reveal');
+
+    const advance = host.locator('.feedback .btn');
+    const label = await advance.textContent();
+    await advance.click();
+    if (label === 'See results') break;
+  }
+
+  await host.waitForSelector('.screen--results');
+  assert.equal(await host.locator('.scoreboard__row').count(), 2);
+  for (const p of joiners) {
+    await p.waitForSelector('.screen--results');
+    assert.ok(await p.locator('.alltime').count() >= 1,
+      'the final screen should carry the all-time leaderboard');
+  }
+  await shoot(host, '17-live-results');
+
+  // The finished game landed in the all-time stats.
+  await maya.click('.btn:has-text("Done")');
+  await maya.waitForSelector('.screen--setup');
+  await maya.click('.btn:has-text("Leaderboard")');
+  await maya.waitForSelector('.alltime__row');
+  const board = await maya.locator('.alltime__name').allTextContents();
+  assert.ok(board.includes('Maya') && board.includes('Sam'),
+    `both players should be on the leaderboard, got ${board.join(', ')}`);
+  await shoot(maya, '18-leaderboard');
+
   // ---- math, on the number pad ---------------------------------------------
   await phone.goto(BASE_URL);
   await phone.evaluate(() => localStorage.clear());
@@ -304,7 +466,7 @@ try {
   await phone.waitForSelector('.screen--setup');
   await phone.click('.chip:has-text("Geography")'); // off
   await phone.click('.chip:has-text("Math")');      // on
-  await shoot(phone, '14-math-setup');
+  await shoot(phone, '20-math-setup');
 
   await phone.click('.btn--xl:has-text("Start")');
 
@@ -342,7 +504,7 @@ try {
       assert.match(await phone.locator('.feedback__mistake').textContent(), /borrow/,
         'a recognised slip should be named, not just marked wrong');
       namedMistakes += 1;
-      await shoot(phone, '15-math-mistake');
+      await shoot(phone, '21-math-mistake');
     }
     if (await phone.locator('.screen--results').count()) break;
     await phone.click('.feedback .btn');
