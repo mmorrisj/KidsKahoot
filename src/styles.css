@@ -339,11 +339,13 @@ body {
   * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
 
-/* Topic chips are grouped under the curriculum they belong to. */
-.topic-group { display: flex; flex-direction: column; gap: 8px; }
-.topic-group + .topic-group { margin-top: 4px; }
+/* Curriculum chips are grouped under their subject; topic chips under their
+   curriculum. Two class names rather than one, so a selector aimed at topics
+   cannot accidentally match a curriculum chip's blurb text. */
+.topic-group, .part-group { display: flex; flex-direction: column; gap: 8px; }
+.topic-group + .topic-group, .part-group + .part-group { margin-top: 4px; }
 
-.topic-group__title {
+.topic-group__title, .part-group__title {
   margin: 0;
   font-size: 0.8rem;
   font-weight: 700;
@@ -513,3 +515,66 @@ body {
   color: var(--ink-soft);
 }
 .locator__caption strong { color: var(--ink); }
+
+/* ------------------------------------------------------------- number pad */
+
+.pad { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+
+.pad__display {
+  width: 100%;
+  max-width: 420px;
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--radius);
+  font-size: clamp(2.2rem, 9vw, 3.2rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+}
+
+.pad__display--empty { color: #b6b3d0; }
+.pad__display--right { background: #d6f3dc; color: var(--good); }
+.pad__display--wrong { background: #fadada; color: var(--bad); }
+
+.pad__keys {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.pad__key {
+  font: inherit;
+  font-size: clamp(1.4rem, 5vw, 1.9rem);
+  font-weight: 800;
+  min-height: clamp(58px, 9vh, 76px);
+  border: none;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: transform 0.08s ease, filter 0.15s ease;
+}
+
+.pad__key:hover:not(:disabled) { filter: brightness(0.95); }
+.pad__key:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 3px 0 rgba(0, 0, 0, 0.18); }
+.pad__key:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
+
+.pad__key--back { background: #d8d5ee; }
+.pad__key--check { background: var(--good); color: #fff; }
+
+/* The named-mistake line: says which slip a wrong answer was, not just "no". */
+.feedback__mistake {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 4px solid var(--bad);
+  background: #fbeaea;
+  border-radius: 0 8px 8px 0;
+  color: var(--ink);
+}

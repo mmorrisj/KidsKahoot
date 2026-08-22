@@ -14,6 +14,7 @@
 import { h, render } from '../ui/dom.js';
 import { regionLegend, renderMap } from '../ui/map.js';
 import { renderUsHighlight } from '../ui/us-map.js';
+import { renderNumberPad } from '../ui/number-pad.js';
 import { renderWorldLocator } from '../ui/world-locator.js';
 import {
   advance,
@@ -83,6 +84,7 @@ function renderTiles(question, onPick) {
 }
 
 function renderAnswers(question, onPick) {
+  if (question.input === 'number') return renderNumberPad(question, onPick);
   if (!question.map) return renderTiles(question, onPick);
   const map = renderMap(question, onPick);
   return {
@@ -92,6 +94,12 @@ function renderAnswers(question, onPick) {
     onKey: null,
     showResult: map.showResult,
   };
+}
+
+/** The explanation for a specific wrong answer, when we recognise it. */
+function namedMistake(question, choice) {
+  if (choice == null) return null;
+  return question.traps?.find((t) => t.value === choice && t.why)?.why ?? null;
 }
 
 export function runMultipleChoice({ mount, session, onFinish }) {
@@ -231,6 +239,10 @@ export function runMultipleChoice({ mount, session, onFinish }) {
         h('p.feedback__headline', headline),
         !result.correct && h('p.feedback__answer', `The answer is ${question.answer}.`),
         h('p.feedback__why', result.explanation),
+        // A wrong answer that matches a known slip gets told which slip it was,
+        // rather than just being marked wrong.
+        namedMistake(question, result.choice)
+          && h('p.feedback__mistake', namedMistake(question, result.choice)),
         result.note && h('p.feedback__note', result.note),
         // Naming the regions is safe now that the answer is in, and it is the
         // moment a kid is most likely to actually read them.

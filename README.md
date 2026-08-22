@@ -4,20 +4,20 @@ A Kahoot-style quiz game for kids, aimed at roughly ages 8–12. Everyone plays 
 one device and passes it around. No accounts, no server, no build step — open it
 and play.
 
-**Geography is the only subject so far**, but the name is deliberately not tied
-to it: math and history are the intended next ones, and nothing in the engine
-is geography-specific. See *Adding a subject* below for where the seam is.
+Content is organised as **subject → curriculum → topic**, so a kid studying
+Virginia Studies is not quizzed on the capital of Uzbekistan, and a times-tables
+round is not interrupted by flags:
 
-Geography content is split into three curricula so a kid studying Virginia
-Studies is not quizzed on the capital of Uzbekistan:
-
-| Curriculum | Topics | Questions |
+| Subject | Curriculum | Topics |
 | --- | --- | --- |
-| **Virginia** | the five regions, cities & historic places, rivers & borders | 175 |
-| **United States** | state capitals, name-the-state, regions, abbreviations, landforms, landmarks | 338 |
-| **World** | capitals, flags, continents, physical geography | 739 |
+| **Geography** | Virginia | the five regions, cities & historic places, rivers & borders |
+| | United States | state capitals, name-the-state, regions, abbreviations, landforms, landmarks |
+| | World | capitals, flags, continents, physical geography |
+| **Math** | Number Facts | times tables, division, adding, taking away |
+| | Carrying & Borrowing | two-digit adding and subtracting |
 
-Virginia is the default, and each curriculum can be switched on independently.
+Roughly 6,900 questions in total. Virginia is the default, and every level can
+be switched on independently.
 
 Virginia questions can be answered on **an actual map of Virginia** instead of
 four tiles — see below.
@@ -108,6 +108,7 @@ src/
     countries.js       140 countries: capital, continent, flag, tier, traps
     world-geography.js world rivers, mountains, deserts, oceans, landmarks
     continents.js
+    math.js            computed fact sets, and the mistakes kids make on them
   lib/
     generator.js       templates that turn data rows into questions
     session.js         queue, turn order, scoring, re-queueing (no DOM)
@@ -117,6 +118,7 @@ src/
   ui/
     dom.js
     map.js             the Virginia map as an answer surface
+    number-pad.js      typing a numeric answer, for math
     us-map.js          the US map as question media (one state highlighted)
     world-locator.js   the world map shown in the feedback panel
 scripts/
@@ -133,6 +135,7 @@ test/
   virginia-map.test.js the generated map matches the regions the quiz asks about
   us-map.test.js       the generated US map covers exactly the fifty states
   world-map.test.js    every country has a pin, and Oceania is not split in two
+  math.test.js         answers re-derived independently, slips offered and named
   ui-smoke.mjs         plays a full two-player round in a real browser
 ```
 
@@ -175,6 +178,58 @@ Continents are dissolved using *this project's* continent for each country
 rather than the source data's, wherever the two disagree — otherwise the game
 could say Cyprus is in Europe and then light up Asia. The build point-tests
 every country pin against the continent the quiz claims for it.
+
+## Math
+
+Math breaks an assumption the geography content never tested, and the fix is
+worth understanding before adding to it.
+
+**The facts are computed, not typed.** Geography is a finite set you write out —
+140 countries, 50 states. Arithmetic looks like the opposite, an infinite space
+where 7 × 8 is worked out rather than looked up. But the times tables from 2 to
+12 are exactly 121 facts, so `src/data/math.js` *enumerates* them. That keeps
+everything the engine gives geography for free: no repeats inside a round, an
+honest question count before you start, a round that replays identically from
+its seed, and the missed-question requeue. Generating problems on the fly would
+break all four.
+
+**Wrong answers are the mistakes kids actually make.** This matters more here
+than in geography, because a kid can rule out a random number by estimating.
+Every distractor is a real slip and carries the explanation of *which* slip, so
+a wrong answer is met with what went wrong rather than just "no":
+
+| Question | Offered | Because |
+| --- | --- | --- |
+| 7 × 8 | 49, 63 | the rows either side of it in the table |
+| 27 + 15 | 32 | the ten never got carried |
+| 27 + 15 | 312 | the two column answers written side by side |
+| 52 − 27 | 35 | the smaller digit taken from the larger in each column |
+
+That last one is the single most common subtraction error in elementary school.
+A kid who types it is told about the borrow.
+
+About forty of the smallest facts — 2 × 2, 21 − 16 — have fewer than three
+distinct mistakes available, so the list is topped up with near-misses. Those
+carry no explanation on purpose: inventing a reason for a number we picked
+arbitrarily would be teaching something untrue.
+
+**Answers are typed, not chosen.** Math questions put up a number pad instead of
+four tiles. Four options let a kid reach 56 by elimination, which trains the
+opposite of what fact practice is for. The choices are still generated, because
+they are what the tiles use if a round mixes subjects — and because a typed
+answer that matches one of them can be met with that mistake's explanation.
+
+**Tiers fall out of the facts.** ×2, ×5, ×10 and ×11 have patterns kids latch
+onto; ×3, ×4 and ×9 have tricks; the 6-7-8-12 corner has none. That splits the
+121 times facts into 72 / 33 / 16 with no hand-authoring, which makes "drill
+only the hard corner" a real mode rather than a setting.
+
+**Rounds are drawn topic by topic, not question by question.** Two-digit
+addition enumerates 3,645 facts against the times tables' 121. An unweighted
+shuffle returns a round of nothing but carrying, so `generateQuestions` takes
+one question from each selected topic in turn. Geography hid this problem
+because its topics were within about 6× of each other; math is 45×. The change
+evens out world rounds too, which used to be mostly flags and capitals.
 
 ## Answering on the map
 
@@ -275,23 +330,25 @@ own pool, and traps that accidentally name the correct answer.
 
 ## Adding a subject
 
-Nothing outside `src/data/` knows what geography is. The generator turns data
-rows into questions through templates; the session engine counts points; the
-modes render whatever a question carries. A times-tables or key-dates subject
-would be new data plus new templates, and no change to any of that machinery.
+Nothing outside `src/data/` knows what geography or math *is*. The generator
+turns data rows into questions through templates; the session engine counts
+points; the modes render whatever a question carries. A history subject is new
+data plus new templates, and no change to any of that machinery.
 
-The one piece that would need a decision is the setup screen. Today it has two
-levels — **curriculum** (Virginia, United States, World) and **topic** (State
-Capitals, Flags, …) — and `TOPICS` carries a `curriculum` field. Subjects want a
-third level above curriculum, so `Geography → United States → State Capitals`
-sits alongside `Maths → Times Tables → Sevens`. That is a field on `TOPICS`, a
-filter in `listQuestionRefs`, and one more row of chips; it is deliberately not
-built yet, because guessing at the shape of a subject that does not exist is how
-you get an abstraction that fits nothing.
+The three levels are plain arrays in `src/lib/generator.js`: `SUBJECTS`, then
+`CURRICULA` with a `subject` field, then `TOPICS` with a `curriculum` field. The
+setup screen reads them and cascades — turning a subject on selects its
+curricula and their topics, and turning it off drops them.
 
-Two things already generalise for free: the tier system (warm-up / school level
-/ expert) is subject-agnostic, and so is every question's `card` and `clue`, so
-flash cards and a Jeopardy board would work on math the day they exist.
+Two things generalise for free: the tier system (warm-up / school level /
+expert) is subject-agnostic, and so is every question's `card` and `clue`, so
+flash cards and a Jeopardy board will work on math and history the day they
+exist.
+
+If a new subject wants a new way of answering, that is a module in `src/ui/`
+returning `{ node, hint, focusFirst, onKey, showResult }` — the same contract the
+tiles, the Virginia map, and the number pad all satisfy. The round loop, timer,
+scoring and feedback do not change.
 
 ## Adding a game mode
 
@@ -320,5 +377,7 @@ mode reads `question.card`; a Jeopardy board reads `question.clue` and groups by
   map wired up as an answer surface the way the Virginia map is.
 - **Progress that survives a reload** — which questions a given kid keeps
   missing, across sessions rather than within one round.
-- **A second subject** — math or history, which is what the name leaves room
-  for. See *Adding a subject* above.
+- **History** — the third subject the name leaves room for. See *Adding a
+  subject* above.
+- **Fractions and decimals** — where grade 4–5 math actually gets hard. Needs
+  more template variety than the fact sets, and the mistakes are subtler.

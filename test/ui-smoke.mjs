@@ -297,6 +297,62 @@ try {
   const worldWidth = await phone.evaluate(() =>
     document.documentElement.scrollWidth - document.documentElement.clientWidth);
   assert.ok(worldWidth <= 1, `the locator makes the page scroll sideways by ${worldWidth}px`);
+  // ---- math, on the number pad ---------------------------------------------
+  await phone.goto(BASE_URL);
+  await phone.evaluate(() => localStorage.clear());
+  await phone.reload();
+  await phone.waitForSelector('.screen--setup');
+  await phone.click('.chip:has-text("Geography")'); // off
+  await phone.click('.chip:has-text("Math")');      // on
+  await shoot(phone, '14-math-setup');
+
+  await phone.click('.btn--xl:has-text("Start")');
+
+  let namedMistakes = 0;
+  const topicsSeen = new Set();
+  for (let i = 0; i < 20 && namedMistakes < 1; i++) {
+    await phone.waitForSelector('.pad');
+    assert.equal(await phone.locator('.tile').count(), 0,
+      'a math question should use the keypad, not tiles');
+    assert.equal(await phone.locator('.pad__key').count(), 12, 'expected ten digits, delete and check');
+
+    const prompt = await phone.locator('.prompt__text').textContent();
+    topicsSeen.add(prompt.replace(/\d+/g, '#'));
+
+    // Check cannot be pressed before anything is typed.
+    assert.ok(await phone.locator('.pad__key--check').isDisabled(),
+      'the check key should be dead until a digit is typed');
+
+    // Type the "smaller digit from the larger" answer to a borrow question,
+    // which is the mistake the feedback is supposed to recognise by name.
+    const borrow = prompt.match(/^(\d\d) − (\d\d) = \?$/);
+    const typed = borrow
+      ? String(Math.abs(Math.floor(borrow[1] / 10) - Math.floor(borrow[2] / 10)) * 10
+        + Math.abs((borrow[1] % 10) - (borrow[2] % 10)))
+      : '1';
+
+    for (const digit of typed) await phone.click(`.pad__key[aria-label="${digit}"]`);
+    assert.equal(await phone.locator('.pad__display').textContent(), typed,
+      'the display should show what was typed');
+
+    await phone.click('.pad__key--check');
+    await phone.waitForSelector('.feedback');
+
+    if (borrow && await phone.locator('.feedback__mistake').count()) {
+      assert.match(await phone.locator('.feedback__mistake').textContent(), /borrow/,
+        'a recognised slip should be named, not just marked wrong');
+      namedMistakes += 1;
+      await shoot(phone, '15-math-mistake');
+    }
+    if (await phone.locator('.screen--results').count()) break;
+    await phone.click('.feedback .btn');
+  }
+  assert.equal(namedMistakes, 1, 'never saw a borrow mistake explained by name');
+  assert.ok(topicsSeen.size >= 3, `a math round should mix topics, saw ${topicsSeen.size} shapes`);
+
+  const mathWidth = await phone.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  assert.ok(mathWidth <= 1, `the keypad makes the page scroll sideways by ${mathWidth}px`);
 } finally {
   await browser.close();
 }

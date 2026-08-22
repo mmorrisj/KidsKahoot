@@ -28,28 +28,67 @@ import {
 } from '../data/virginia.js';
 import { CONTINENTS } from '../data/continents.js';
 import { projectToMap } from '../data/virginia-map.js';
+import {
+  ADDITION_FACTS,
+  BORROW_FACTS,
+  CARRY_FACTS,
+  TIMES_FACTS,
+  additionTraps,
+  borrowTraps,
+  carryTraps,
+  divisionTraps,
+  subtractionTraps,
+  timesTraps,
+} from '../data/math.js';
 import { shuffle, sample } from './rng.js';
 
 export const CHOICE_COUNT = 4;
 
+/**
+ * Subjects sit above curricula. Geography's curricula are places; math's are
+ * strands. The level exists so the setup screen can stop calling Virginia a
+ * subject, which it was doing for want of anywhere better to put it.
+ */
+export const SUBJECTS = [
+  { id: 'geography', label: 'Geography', icon: '🌍' },
+  { id: 'math', label: 'Math', icon: '🔢' },
+];
+
 export const CURRICULA = [
   {
     id: 'virginia',
+    subject: 'geography',
     label: 'Virginia',
     icon: '🏛️',
     blurb: 'Regions, rivers, and places close to home',
   },
   {
     id: 'united-states',
+    subject: 'geography',
     label: 'United States',
     icon: '🇺🇸',
     blurb: 'States, capitals, landforms, and landmarks',
   },
   {
     id: 'world',
+    subject: 'geography',
     label: 'World',
     icon: '🌍',
     blurb: 'Countries, flags, and continents',
+  },
+  {
+    id: 'number-facts',
+    subject: 'math',
+    label: 'Number Facts',
+    icon: '✖️',
+    blurb: 'The times tables and the facts under twenty',
+  },
+  {
+    id: 'regrouping',
+    subject: 'math',
+    label: 'Carrying & Borrowing',
+    icon: '🧮',
+    blurb: 'Two-digit adding and subtracting',
   },
 ];
 
@@ -72,6 +111,14 @@ export const TOPICS = [
   { id: 'flags', curriculum: 'world', label: 'Flags', icon: '🚩' },
   { id: 'continents', curriculum: 'world', label: 'Continents', icon: '🌍' },
   { id: 'world-physical', curriculum: 'world', label: 'Rivers, Mountains & Landmarks', icon: '🏔️' },
+
+  // Math
+  { id: 'times-tables', curriculum: 'number-facts', label: 'Times Tables', icon: '✖️' },
+  { id: 'division-facts', curriculum: 'number-facts', label: 'Division Facts', icon: '➗' },
+  { id: 'addition-facts', curriculum: 'number-facts', label: 'Adding Facts', icon: '➕' },
+  { id: 'subtraction-facts', curriculum: 'number-facts', label: 'Taking Away Facts', icon: '➖' },
+  { id: 'two-digit-addition', curriculum: 'regrouping', label: 'Adding with Carrying', icon: '🔟' },
+  { id: 'two-digit-subtraction', curriculum: 'regrouping', label: 'Subtracting with Borrowing', icon: '🔢' },
 ];
 
 /**
@@ -91,6 +138,12 @@ export const TIERS = [
 ];
 
 export const topicsIn = (curriculumId) => TOPICS.filter((t) => t.curriculum === curriculumId);
+
+export const curriculaIn = (subjectId) => CURRICULA.filter((c) => c.subject === subjectId);
+
+/** Every topic under a subject, across all of its curricula. */
+export const topicsInSubject = (subjectId) =>
+  curriculaIn(subjectId).flatMap((c) => topicsIn(c.id));
 
 /** True when the chosen topics can produce map questions at all. */
 export function hasMapQuestions(topics) {
@@ -219,6 +272,47 @@ function spacedPins(rng, answer, candidates, count) {
     chosen.push(candidate);
   }
   return chosen;
+}
+
+/**
+ * Math questions are built from a fact row plus a list of mistakes, rather than
+ * from a pool of same-category answers the way geography questions are. There is
+ * no "other capitals in Europe" equivalent for arithmetic: the only wrong
+ * answers worth offering are the ones a kid would actually arrive at, and
+ * src/data/math.js works those out per fact.
+ *
+ * `input: 'number'` tells the mode to put up a keypad instead of four tiles.
+ * The choices are still generated, because they are what the tiles use when a
+ * round is set to tiles, and because a typed answer that matches one of them
+ * can be met with the explanation for that specific mistake.
+ */
+function mathTemplate({ id, dataset, topic, facts, trapsFor, ask, answerFor, sum }) {
+  return {
+    id,
+    dataset,
+    topic,
+    entities: () => facts,
+    tierOf: (x) => x.tier,
+    make: (rng, x) => {
+      const answer = String(answerFor(x));
+      // Most-likely mistakes first: they are the instructive ones, and a kid
+      // meeting the same fact twice benefits from meeting the same trap twice.
+      const traps = trapsFor(x).slice(0, CHOICE_COUNT - 1)
+        .map((t) => ({ value: String(t.value), why: t.why }));
+      return {
+        category: 'Math',
+        prompt: `${ask(x)} = ?`,
+        media: null,
+        input: 'number',
+        answer,
+        choices: shuffle(rng, [answer, ...traps.map((t) => t.value)]),
+        traps,
+        explanation: `${ask(x)} = ${answer}.`,
+        card: { front: ask(x), back: answer, hint: null },
+        clue: { text: `${ask(x)}`, response: `What is ${answer}?` },
+      };
+    },
+  };
 }
 
 /**
@@ -587,6 +681,64 @@ const TEMPLATES = [
     applies: (x) => x.category === 'Landmarks',
   }),
 
+  // ------------------------------------------------------------------- Math
+  mathTemplate({
+    id: 'times-product',
+    dataset: 'times-facts',
+    topic: 'times-tables',
+    facts: TIMES_FACTS,
+    trapsFor: timesTraps,
+    ask: (x) => `${x.a} × ${x.b}`,
+    answerFor: (x) => x.a * x.b,
+  }),
+  mathTemplate({
+    // Same rows as the times tables, asked backwards — so a round gives a fact
+    // one way or the other, never both.
+    id: 'times-quotient',
+    dataset: 'times-facts',
+    topic: 'division-facts',
+    facts: TIMES_FACTS,
+    trapsFor: divisionTraps,
+    ask: (x) => `${x.a * x.b} ÷ ${x.b}`,
+    answerFor: (x) => x.a,
+  }),
+  mathTemplate({
+    id: 'addition-sum',
+    dataset: 'addition-facts',
+    topic: 'addition-facts',
+    facts: ADDITION_FACTS,
+    trapsFor: additionTraps,
+    ask: (x) => `${x.a} + ${x.b}`,
+    answerFor: (x) => x.a + x.b,
+  }),
+  mathTemplate({
+    id: 'addition-difference',
+    dataset: 'addition-facts',
+    topic: 'subtraction-facts',
+    facts: ADDITION_FACTS,
+    trapsFor: subtractionTraps,
+    ask: (x) => `${x.a + x.b} − ${x.b}`,
+    answerFor: (x) => x.a,
+  }),
+  mathTemplate({
+    id: 'carry-sum',
+    dataset: 'carry-facts',
+    topic: 'two-digit-addition',
+    facts: CARRY_FACTS,
+    trapsFor: carryTraps,
+    ask: (x) => `${x.a} + ${x.b}`,
+    answerFor: (x) => x.a + x.b,
+  }),
+  mathTemplate({
+    id: 'borrow-difference',
+    dataset: 'borrow-facts',
+    topic: 'two-digit-subtraction',
+    facts: BORROW_FACTS,
+    trapsFor: borrowTraps,
+    ask: (x) => `${x.a} − ${x.b}`,
+    answerFor: (x) => x.a - x.b,
+  }),
+
   // ------------------------------------------------------------------ World
   {
     id: 'capital-of-country',
@@ -769,8 +921,10 @@ function materialize(rng, { template, entity, tier }) {
     curriculum: TOPICS.find((t) => t.id === topicOf(template, entity))?.curriculum,
     tier,
     choiceStyle: 'text',
+    input: 'choice',
     map: null,
     locate: null,
+    traps: [],
     note: entity.note ?? null,
     ...template.make(rng, entity),
   };
@@ -785,20 +939,45 @@ function materialize(rng, { template, entity, tier }) {
  * the round otherwise.
  */
 export function generateQuestions({ rng, topics, tiers, mapUse, count = 10 } = {}) {
-  const refs = shuffle(rng, listQuestionRefs({ topics, tiers, mapUse }));
+  const refs = listQuestionRefs({ topics, tiers, mapUse });
+
+  // Draw round-robin across the chosen topics rather than uniformly across all
+  // questions. Topics are wildly different sizes — two-digit addition
+  // enumerates 3,645 facts and the times tables 121 — so a uniform shuffle
+  // hands back a round of nothing but carrying. Geography hid this because its
+  // topics were within about 6x of each other; math is 45x.
+  const byTopic = new Map();
+  for (const ref of refs) {
+    const topic = topicOf(ref.template, ref.entity);
+    if (!byTopic.has(topic)) byTopic.set(topic, []);
+    byTopic.get(topic).push(ref);
+  }
+
+  const queues = shuffle(rng, [...byTopic.values()].map((list) => shuffle(rng, list)));
+  const cursors = queues.map(() => 0);
 
   const usedRows = new Set();
   const primary = [];
   const leftovers = [];
 
-  for (const ref of refs) {
-    const key = `${ref.template.dataset}:${entityKey(ref.entity)}`;
-    if (usedRows.has(key)) {
-      leftovers.push(ref);
-      continue;
+  // One pass per lap, taking a question from each topic that still has any.
+  for (let taken = 0; taken < refs.length;) {
+    for (let i = 0; i < queues.length; i++) {
+      if (cursors[i] >= queues[i].length) continue;
+      const ref = queues[i][cursors[i]++];
+      taken++;
+
+      // Two templates over one row make near-duplicate questions (7 x 8, then
+      // 56 / 8), so a row is used once per round unless the pool is too small.
+      const key = `${ref.template.dataset}:${entityKey(ref.entity)}`;
+      if (usedRows.has(key)) leftovers.push(ref);
+      else {
+        usedRows.add(key);
+        primary.push(ref);
+      }
+      if (primary.length >= count) break;
     }
-    usedRows.add(key);
-    primary.push(ref);
+    if (primary.length >= count) break;
   }
 
   return [...primary, ...leftovers]

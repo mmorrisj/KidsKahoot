@@ -8,13 +8,15 @@
 import { h, render } from './ui/dom.js';
 import { createRng, randomSeed } from './lib/rng.js';
 import {
-  CURRICULA,
   MAP_USES,
+  SUBJECTS,
   TIERS,
   countAvailable,
+  curriculaIn,
   generateQuestions,
   hasMapQuestions,
   topicsIn,
+  topicsInSubject,
 } from './lib/generator.js';
 import { createSession, missedQuestions, standings } from './lib/session.js';
 import { runMultipleChoice } from './modes/multiple-choice.js';
@@ -37,7 +39,8 @@ const TIMER_OPTIONS = [
 const defaultSettings = () => ({
   version: SETTINGS_VERSION,
   players: ['Player 1'],
-  // Virginia and US geography come first; the world is there when they want it.
+  // Virginia geography comes first; everything else is one tap away.
+  subjects: ['geography'],
   curricula: ['virginia'],
   topics: topicsIn('virginia').map((t) => t.id),
   tiers: [1, 2],
@@ -72,6 +75,12 @@ function toggle(list, value) {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
+/** Add ids that are not already selected; used by both cascades below. */
+const withAll = (selected, ids) =>
+  [...selected, ...ids.filter((id) => !selected.includes(id))];
+
+const without = (selected, ids) => selected.filter((id) => !ids.includes(id));
+
 /**
  * Turning a curriculum on selects all of its topics; turning it off drops them.
  * Anything else would leave topics selected that the topic list no longer shows.
@@ -81,9 +90,19 @@ function toggleCurriculum(id) {
   const on = !settings.curricula.includes(id);
   return {
     curricula: toggle(settings.curricula, id),
-    topics: on
-      ? [...settings.topics, ...ids.filter((t) => !settings.topics.includes(t))]
-      : settings.topics.filter((t) => !ids.includes(t)),
+    topics: on ? withAll(settings.topics, ids) : without(settings.topics, ids),
+  };
+}
+
+/** A subject cascades the same way, one level further down. */
+function toggleSubject(id) {
+  const curricula = curriculaIn(id).map((c) => c.id);
+  const topics = topicsInSubject(id).map((t) => t.id);
+  const on = !settings.subjects.includes(id);
+  return {
+    subjects: toggle(settings.subjects, id),
+    curricula: on ? withAll(settings.curricula, curricula) : without(settings.curricula, curricula),
+    topics: on ? withAll(settings.topics, topics) : without(settings.topics, topics),
   };
 }
 
@@ -156,20 +175,36 @@ function showSetup() {
 
       h('section.panel',
         h('h2.panel__title', 'Which subject?'),
-        h('div.chips', CURRICULA.map((c) =>
-          chip(`${c.icon} ${c.label}`, settings.curricula.includes(c.id),
-            () => update(toggleCurriculum(c.id)), c.blurb))),
+        h('div.chips', SUBJECTS.map((sub) =>
+          chip(`${sub.icon} ${sub.label}`, settings.subjects.includes(sub.id),
+            () => update(toggleSubject(sub.id))))),
+      ),
+
+      settings.subjects.length > 0 && h('section.panel',
+        h('h2.panel__title', 'Which part?'),
+        SUBJECTS.filter((sub) => settings.subjects.includes(sub.id)).map((sub) =>
+          h('div.part-group',
+            // With one subject chosen there is nothing to disambiguate, so the
+            // heading only earns its place once two are on.
+            settings.subjects.length > 1 && h('h3.part-group__title', sub.label),
+            h('div.chips', curriculaIn(sub.id).map((c) =>
+              chip(`${c.icon} ${c.label}`, settings.curricula.includes(c.id),
+                () => update(toggleCurriculum(c.id)), c.blurb))),
+          )),
       ),
 
       settings.curricula.length > 0 && h('section.panel',
         h('h2.panel__title', 'What should we ask about?'),
-        CURRICULA.filter((c) => settings.curricula.includes(c.id)).map((c) =>
-          h('div.topic-group',
-            h('h3.topic-group__title', c.label),
-            h('div.chips', topicsIn(c.id).map((t) =>
-              chip(`${t.icon} ${t.label}`, settings.topics.includes(t.id),
-                () => update({ topics: toggle(settings.topics, t.id) })))),
-          )),
+        SUBJECTS.filter((sub) => settings.subjects.includes(sub.id))
+          .flatMap((sub) => curriculaIn(sub.id))
+          .filter((c) => settings.curricula.includes(c.id))
+          .map((c) =>
+            h('div.topic-group',
+              h('h3.topic-group__title', c.label),
+              h('div.chips', topicsIn(c.id).map((t) =>
+                chip(`${t.icon} ${t.label}`, settings.topics.includes(t.id),
+                  () => update({ topics: toggle(settings.topics, t.id) })))),
+            )),
       ),
 
       mapPossible && h('section.panel',
