@@ -33,10 +33,6 @@ Other devices on the same network reach it at `http://<your-ip>:8080`. The
 node server (Node 22.5+) does three jobs: static files, the WebSocket hub for
 live games, and the all-time leaderboard.
 
-Solo pass-the-device play needs none of that — any static file server works
-(ES modules do not load over `file://`), and it deploys to GitHub Pages as-is;
-only hosting live games and the leaderboard require the real server.
-
 `server.mjs` serves everything `Cache-Control: no-store`. Browsers cache ES
 modules aggressively, and without that header you can pull a change, reload, and
 still be looking at the previous version of the app with nothing to say it is
@@ -44,10 +40,27 @@ stale. **If a feature you know landed seems to be missing, suspect that first**
 — a hard reload (Ctrl/Cmd-Shift-R) clears it. Static hosts will not set it, so
 the same caution applies on GitHub Pages.
 
-```sh
-npm test            # unit tests, no browser needed
-npm run test:ui     # browser smoke test, needs `npm install` and `npm start` running
-```
+## Playing it online
+
+Every push to `main` publishes the game to GitHub Pages:
+
+**https://mmorrisj.github.io/KidsKahoot/**
+
+Pages serves static files, so what is up there is **solo pass-the-device play** —
+every question type, every map, the keypad, all of it, on any phone or tablet
+with a browser. ES modules do not load over `file://`, which is why the page has
+to be served rather than double-clicked; Pages handles that.
+
+Three things need the node server and are therefore **hidden** on the deployed
+page rather than offered and broken: hosting a live game, joining one, and the
+leaderboard. `probeForGameServer` in `src/app.js` asks for `api/stats` once
+before the first render and only shows those controls if something answers. The
+probe URL is relative on purpose — the deployed game lives under a subpath, and
+a leading slash would miss it.
+
+`.github/workflows/pages.yml` runs the unit tests before publishing, so a build
+that fails them never reaches the page. It uploads only `index.html` and `src/`;
+the server, tests and build scripts are not part of the deployed game.
 
 ## The idea
 
