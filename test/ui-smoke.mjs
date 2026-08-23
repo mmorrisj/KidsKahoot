@@ -471,15 +471,20 @@ try {
   await phone.click('.btn--xl:has-text("Start")');
 
   let namedMistakes = 0;
-  const topicsSeen = new Set();
-  for (let i = 0; i < 20 && namedMistakes < 1; i++) {
+  const shapesSeen = new Set();
+  // Keep going until both things have been observed. Stopping at the first
+  // named mistake made this flaky: when the very first question was a borrow,
+  // the round ended having seen exactly one kind of question.
+  const enough = () => namedMistakes >= 1 && shapesSeen.size >= 3;
+  for (let i = 0; i < 25 && !enough(); i++) {
     await phone.waitForSelector('.pad');
     assert.equal(await phone.locator('.tile').count(), 0,
       'a math question should use the keypad, not tiles');
     assert.equal(await phone.locator('.pad__key').count(), 12, 'expected ten digits, delete and check');
 
     const prompt = await phone.locator('.prompt__text').textContent();
-    topicsSeen.add(prompt.replace(/\d+/g, '#'));
+    // Digits collapse to #, so this counts operators: x, /, + and -.
+    shapesSeen.add(prompt.replace(/\d+/g, '#'));
 
     // Check cannot be pressed before anything is typed.
     assert.ok(await phone.locator('.pad__key--check').isDisabled(),
@@ -503,14 +508,15 @@ try {
     if (borrow && await phone.locator('.feedback__mistake').count()) {
       assert.match(await phone.locator('.feedback__mistake').textContent(), /borrow/,
         'a recognised slip should be named, not just marked wrong');
+      if (namedMistakes === 0) await shoot(phone, '21-math-mistake');
       namedMistakes += 1;
-      await shoot(phone, '21-math-mistake');
     }
     if (await phone.locator('.screen--results').count()) break;
     await phone.click('.feedback .btn');
   }
-  assert.equal(namedMistakes, 1, 'never saw a borrow mistake explained by name');
-  assert.ok(topicsSeen.size >= 3, `a math round should mix topics, saw ${topicsSeen.size} shapes`);
+  assert.ok(namedMistakes >= 1, 'never saw a borrow mistake explained by name');
+  assert.ok(shapesSeen.size >= 3,
+    `a math round should mix operators, saw ${shapesSeen.size}: ${[...shapesSeen].join(' ')}`);
 
   const mathWidth = await phone.evaluate(() =>
     document.documentElement.scrollWidth - document.documentElement.clientWidth);

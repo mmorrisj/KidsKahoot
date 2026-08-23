@@ -71,6 +71,33 @@ function saveSettings(settings) {
 
 let settings = loadSettings();
 
+/**
+ * Whether a game server is answering.
+ *
+ * Solo pass-the-device play is pure static files, so the app is happy on
+ * GitHub Pages — but hosting, joining and the leaderboard all need the node
+ * server. Rather than let a kid press "Join a game" and land on "lost the game
+ * server" for a server that was never there, those three are hidden unless one
+ * answers. Probed once before the first render, so nothing flickers.
+ */
+// Relative on purpose: the app may be served from a subpath such as
+// /KidsQuizQuest/, where a leading slash would miss.
+const STATS_URL = 'api/stats';
+const LIVE_PROBE_MS = 1500;
+let liveAvailable = false;
+
+async function probeForGameServer() {
+  try {
+    const res = await fetch(STATS_URL, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(LIVE_PROBE_MS),
+    });
+    liveAvailable = res.ok;
+  } catch {
+    liveAvailable = false; // static host, or nothing listening
+  }
+}
+
 // --------------------------------------------------------------- setup screen
 
 function toggle(list, value) {
@@ -141,7 +168,7 @@ function showSetup() {
       h('header.hero',
         h('h1.hero__title', '🎯 Kids Quiz Quest'),
         h('p.hero__sub', 'Pass the device around and see who knows the most.'),
-        h('div.hero__links',
+        liveAvailable && h('div.hero__links',
           h('button.btn.btn--ghost', { type: 'button', onclick: showJoin },
             '📡 Join a game'),
           h('button.btn.btn--ghost', { type: 'button', onclick: showLeaderboard },
@@ -260,7 +287,7 @@ function showSetup() {
           // not trigger a re-render.
           onclick: () => startRound(playerNames()),
         }, 'Start'),
-        h('button.btn', {
+        liveAvailable && h('button.btn', {
           type: 'button',
           disabled: !ready || available === 0,
           onclick: hostGame,
@@ -299,7 +326,7 @@ function showJoin() {
 async function showLeaderboard() {
   let players = null;
   try {
-    const res = await fetch('/api/stats');
+    const res = await fetch(STATS_URL);
     if (res.ok) ({ players } = await res.json());
   } catch {
     // Fall through to the "needs the server" message.
@@ -395,4 +422,5 @@ function showResults(session) {
   );
 }
 
+await probeForGameServer();
 showSetup();

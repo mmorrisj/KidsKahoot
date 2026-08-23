@@ -1,0 +1,68 @@
+# Publishes the game to GitHub Pages on every push to main.
+#
+# Pages serves static files only, so what goes up is solo pass-the-device play:
+# every question type, every map, the keypad, the lot. Hosting a live game,
+# joining one, and the leaderboard all need the node server in server.mjs, and
+# the app hides those three when no server answers — see probeForGameServer in
+# src/app.js — so the deployed page offers nothing that cannot work.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it half way.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # Don't publish a build whose tests do not pass. The browser smoke test
+      # needs a browser and a running server, so it stays a local check; these
+      # are the dependency-free unit tests.
+      - run: npm ci
+      - run: npm test
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      # Only the files a browser actually asks for. The server, tests and build
+      # scripts are not part of the deployed game.
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp -r src _site/
+          # Stop Pages running the files through Jekyll.
+          touch _site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
