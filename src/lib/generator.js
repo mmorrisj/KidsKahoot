@@ -41,6 +41,7 @@ import {
   timesTraps,
 } from '../data/math.js';
 import { shuffle, sample } from './rng.js';
+import { SCIENCE_FACTS } from '../data/science.js';
 
 export const CHOICE_COUNT = 4;
 
@@ -52,9 +53,17 @@ export const CHOICE_COUNT = 4;
 export const SUBJECTS = [
   { id: 'geography', label: 'Geography', icon: '🌍' },
   { id: 'math', label: 'Math', icon: '🔢' },
+  { id: 'science', label: 'Science', icon: '🔬' },
 ];
 
 export const CURRICULA = [
+  {
+    id: 'living-world',
+    subject: 'science',
+    label: 'Animals, Habitats & Food Webs',
+    icon: '🌱',
+    blurb: 'Explore living things and how they depend on each other',
+  },
   {
     id: 'virginia',
     subject: 'geography',
@@ -93,6 +102,11 @@ export const CURRICULA = [
 ];
 
 export const TOPICS = [
+  // Science
+  { id: 'science-habitats', curriculum: 'living-world', label: 'Habitats', icon: '🌳' },
+  { id: 'science-adaptations', curriculum: 'living-world', label: 'Adaptations', icon: '🦆' },
+  { id: 'science-food-webs', curriculum: 'living-world', label: 'Food Chains & Webs', icon: '🌿' },
+  { id: 'science-ecosystem-changes', curriculum: 'living-world', label: 'Ecosystem Changes', icon: '🦋' },
   // Virginia
   { id: 'va-regions', curriculum: 'virginia', label: 'The Five Regions', icon: '🗺️' },
   { id: 'va-places', curriculum: 'virginia', label: 'Cities & Historic Places', icon: '🏘️' },
@@ -722,6 +736,25 @@ const TEMPLATES = [
     pools: US_POOLS,
     applies: (x) => x.category === 'Landmarks',
   }),
+
+  // Science uses curated alternatives: a random habitat can also be correct.
+  {
+    id: 'science-fact',
+    dataset: 'science-facts',
+    topic: (x) => x.topic,
+    entities: () => SCIENCE_FACTS,
+    tierOf: (x) => x.tier,
+    make: (rng, x) => ({
+      category: x.category,
+      prompt: x.prompt,
+      media: null,
+      answer: x.answer,
+      choices: buildChoices(rng, { answer: x.answer, candidates: x.distractors }),
+      explanation: x.explanation,
+      card: { front: x.prompt, back: x.answer, hint: null },
+      clue: { text: x.prompt, response: `What is ${x.answer}?` },
+    }),
+  },
 
   // ------------------------------------------------------------------- Math
   mathTemplate({

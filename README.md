@@ -15,6 +15,7 @@ round is not interrupted by flags:
 | | World | capitals, flags, continents, physical geography |
 | **Math** | Number Facts | times tables, division, adding, taking away |
 | | Carrying & Borrowing | two-digit adding and subtracting |
+| **Science** | Animals, Habitats & Food Webs | habitats, adaptations, food chains & webs, ecosystem changes |
 
 Roughly 6,900 questions in total. Virginia is the default, and every level can
 be switched on independently.
@@ -260,6 +261,36 @@ one question from each selected topic in turn. Geography hid this problem
 because its topics were within about 6× of each other; math is 45×. The change
 evens out world rounds too, which used to be mostly flags and capitals.
 
+## Science
+
+**Animals, Habitats & Food Webs** adds 64 questions aimed at roughly grades
+3–6: 16 each on habitats, adaptations, food chains and webs, and ecosystem
+changes. Select **Science** on the setup screen to enable it; each topic can
+also be selected independently.
+
+Every topic includes all three difficulty tiers. Warm-up emphasizes familiar
+organisms and basic needs; school level adds ecological roles and explanations;
+expert asks about evidence, changing conditions, and connections in food webs.
+These are difficulty bands, not fixed grade assignments.
+
+Questions use four answer tiles in solo and live games. Each has a teaching
+explanation, plus the existing flash-card and clue representations for future
+modes. Virginia connections include the Chesapeake Bay, wetlands and streamside
+habitats. Food-web predictions state their assumptions rather than presenting
+complex ecosystem changes as guaranteed outcomes.
+
+`src/data/science.js` stores the content with three curated alternatives per
+question. Unlike arithmetic or capital pairs, many science concepts need
+individual scenarios: randomly pairing habitats and animals can create several
+correct answers. The generator shuffles these alternatives and balances the
+selected topics using the same seeded round selection as other subjects.
+
+Content references: [National Park Service ecosystem lessons](https://www.nps.gov/teachers/classrooms/craters-ecosystem.htm),
+[NOAA aquatic food webs](https://www.noaa.gov/education/resource-collections/marine-life/aquatic-food-webs),
+and [Texas Parks and Wildlife food-web lessons](https://tpwd.texas.gov/education/resources/lesson-plans/coastal-ecology/the-web-of-life).
+Questions use original wording. `test/science.test.js` checks the complete bank,
+topic and tier selection, solo scoring, and live answer/reveal behavior.
+
 ## Answering on the map
 
 Virginia and US questions come in two surfaces, chosen with a setting on the
@@ -412,7 +443,7 @@ own pool, and traps that accidentally name the correct answer.
 
 Nothing outside `src/data/` knows what geography or math *is*. The generator
 turns data rows into questions through templates; the session engine counts
-points; the modes render whatever a question carries. A history subject is new
+points; the modes render whatever a question carries. A further subject is new
 data plus new templates, and no change to any of that machinery.
 
 The three levels are plain arrays in `src/lib/generator.js`: `SUBJECTS`, then
@@ -461,7 +492,7 @@ More map:
   adjacency data the map does not carry yet; the tap surface is ready for it.
 - **Rivers on the map** — the four rivers feeding the Chesapeake are taught as
   lines, and tapping them needs river geometry the county data does not carry.
-- **History** — the third subject the name leaves room for. See *Adding a
+- **History** — another subject the name leaves room for. See *Adding a
   subject* above.
 - **Fractions and decimals** — where grade 4–5 math actually gets hard. Needs
   more template variety than the fact sets, and the mistakes are subtler.

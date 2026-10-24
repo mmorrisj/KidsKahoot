@@ -141,6 +141,11 @@ function playerNames() {
 }
 
 function showSetup() {
+  // Switching from a map round to Science must not leave an invisible filter.
+  if (settings.mapUse === 'map' && !hasMapQuestions(settings.topics)) {
+    settings = { ...settings, mapUse: 'both' };
+    saveSettings(settings);
+  }
   const available = countAvailable({
     topics: settings.topics,
     tiers: settings.tiers,

@@ -521,6 +521,46 @@ try {
   const mathWidth = await phone.evaluate(() =>
     document.documentElement.scrollWidth - document.documentElement.clientWidth);
   assert.ok(mathWidth <= 1, `the keypad makes the page scroll sideways by ${mathWidth}px`);
+
+  // ---- Science: switch from map-only, select topics, play a phone round ----
+  await phone.evaluate(() => localStorage.clear());
+  await phone.reload();
+  await phone.waitForSelector('.screen--setup');
+  await phone.click('.chip:has-text("Map only")');
+  await phone.click('.chip:has-text("Science")');
+  await phone.click('.chip:has-text("Geography")');
+  await phone.click('.chip:has-text("Expert")');
+  assert.deepEqual(await phone.locator('.topic-group__title').allTextContents(),
+    ['Animals, Habitats & Food Webs']);
+  assert.match(await phone.locator('.availability').first().textContent(), /64/,
+    'switching away from map topics must clear the hidden map-only filter');
+  await phone.click('.chip:has-text("Ecosystem Changes")');
+  assert.match(await phone.locator('.availability').first().textContent(), /48/);
+  await phone.click('.chip:has-text("Ecosystem Changes")');
+  await phone.getByRole('button', { name: '10', exact: true }).click();
+  await shoot(phone, '22-science-setup');
+  await phone.click('.btn--xl:has-text("Start")');
+  let scienceAnswers = 0;
+  for (let guard = 0; guard < 100; guard++) {
+    if (await phone.locator('.screen--results').count()) break;
+    if (await phone.locator('.feedback .btn').count()) {
+      await phone.click('.feedback .btn');
+      continue;
+    }
+    await phone.waitForSelector('.tile:not([disabled])');
+    assert.equal(await phone.locator('.tile').count(), 4);
+    assert.equal(await phone.locator('.map, .usmap, .pad').count(), 0);
+    await phone.click('.tile >> nth=0');
+    await phone.waitForSelector('.feedback');
+    assert.equal(await phone.locator('.tile--correct').count(), 1);
+    if (scienceAnswers === 0) await shoot(phone, '23-science-feedback');
+    scienceAnswers++;
+    const width = await phone.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    assert.ok(width <= 1, `science feedback overflows the phone by ${width}px`);
+  }
+  await phone.waitForSelector('.screen--results');
+  assert.ok(scienceAnswers >= 10 && scienceAnswers <= 20);
 } finally {
   await browser.close();
 }
